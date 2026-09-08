@@ -1,4 +1,4 @@
-# Manclucka
+# Manclucka 2
 
 Backyard Kalah. Sow Orpington hens around fenced yards, land in your coop for another turn, and steal a flock with a rooster crow.
 

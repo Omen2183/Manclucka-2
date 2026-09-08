@@ -29,7 +29,7 @@ export function MenuScreen({
             <HenMark className="size-8" />
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">backyard kalah</p>
           </div>
-          <h1 className="mt-2 font-display text-4xl tracking-[-0.03em] text-fg sm:text-5xl">Manclucka</h1>
+          <h1 className="mt-2 font-display text-4xl tracking-[-0.03em] text-fg sm:text-5xl">Manclucka 2</h1>
           <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">
             Sow your Orpingtons around the fenced yards. Land in your coop for another turn. A friendly capture
             crows the rooster; when the other side steals your hens, they panic.
