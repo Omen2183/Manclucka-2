@@ -1,0 +1,11 @@
+{
+  "target": "creature",
+  "mode": "single",
+  "prompt": "",
+  "role": "",
+  "input": "/workspace/assets/sprites/orpington/blue/raw.jpg",
+  "threshold": 80,
+  "edge_threshold": 130,
+  "duration": 200,
+  "single_size": 384
+}

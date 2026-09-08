@@ -1,0 +1,628 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-sans: "Figtree", system-ui, sans-serif;
+
+  --color-bg: #ede6d6;
+  --color-surface: #f7f1e6;
+  --color-surface-2: #e4d8c2;
+  --color-fg: #1c1612;
+  --color-muted: #6b5a48;
+  --color-subtle: #8a7662;
+  --color-primary: #8e3b24;
+  --color-primary-fg: #f7f1e6;
+  --color-grass: #3f6b3a;
+  --color-grass-dark: #2e522c;
+  --color-wood: #5c3d2e;
+  --color-wood-dark: #3a2a1c;
+  --color-coop: #7a3e28;
+  --color-straw: #c9a35a;
+  --color-border: color-mix(in oklab, #1c1612 14%, transparent);
+  --color-ring: #8e3b24;
+  --color-danger: #9b2c1a;
+  --color-good: #3f6b3a;
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-2xl: 32px;
+
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-micro: 80ms;
+  --motion-quick: 150ms;
+  --motion-fast: 250ms;
+  --motion-slow: 400ms;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+    font-family: var(--font-display);
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+}
+
+html.play-flipped,
+html.play-flipped body {
+  overflow: hidden;
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+.play-portrait,
+.play-landscape {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.play-rotate-landscape {
+  position: fixed;
+  z-index: 20;
+  top: 50%;
+  left: 50%;
+  width: 100dvh;
+  height: 100dvw;
+  max-width: none;
+  max-height: none;
+  transform: translate(-50%, -50%) rotate(90deg);
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+.play-shell {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  flex-direction: column;
+  padding: max(0.4rem, env(safe-area-inset-top)) 0.55rem max(0.45rem, env(safe-area-inset-bottom));
+}
+
+.play-hud {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.play-status {
+  flex-shrink: 0;
+  margin: 0.2rem 0 0.35rem;
+  min-height: 1.1rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.board-stage {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.play-end {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 1rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  background: color-mix(in oklab, var(--color-wood-dark) 42%, transparent);
+}
+
+.board-wrap {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  container-type: size;
+}
+
+.board-slab {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  background-color: var(--color-wood-dark);
+  background-image:
+    linear-gradient(180deg, color-mix(in oklab, white 16%, transparent), transparent 32%, color-mix(in oklab, black 32%, transparent)),
+    url("/art/wood.jpg");
+  background-size: cover;
+  background-position: center;
+  box-shadow:
+    0 18px 36px color-mix(in oklab, black 38%, transparent),
+    0 2px 0 color-mix(in oklab, var(--color-straw) 28%, transparent),
+    inset 0 1px 0 color-mix(in oklab, white 22%, transparent),
+    inset 0 -14px 22px color-mix(in oklab, black 32%, transparent);
+}
+
+.board-wrap-portrait .board-slab {
+  width: 100%;
+  height: 100%;
+  border-radius: 1.35rem;
+}
+
+.board-wrap-landscape .board-slab {
+  width: 100%;
+  height: 100%;
+  border-radius: 1.5rem;
+}
+
+.board-inlay {
+  pointer-events: none;
+  position: absolute;
+  inset: 6px;
+  border-radius: 1.2rem;
+  border: 1px solid color-mix(in oklab, var(--color-straw) 42%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, black 18%, transparent);
+}
+
+.play-landscape .board-inlay {
+  border-radius: 1.65rem;
+}
+
+.board-grid {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  min-height: 0;
+  gap: 0.35rem;
+  padding: 0.5rem;
+}
+
+.board-grid-landscape {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, 1.05fr) minmax(0, 6.6fr) minmax(4.5rem, 1.05fr);
+  align-items: stretch;
+}
+
+.board-grid-portrait {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(4.4rem, 1.05fr) minmax(0, 6.7fr) minmax(4.4rem, 1.05fr);
+}
+
+.pit-band {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.pit-row {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  align-items: stretch;
+  justify-items: stretch;
+  gap: 0.32rem;
+}
+
+.pit-band-portrait {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.pit-pair {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.pit-cell {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  place-items: center;
+  container-type: size;
+}
+
+.yard-stack {
+  position: relative;
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
+}
+
+.board-groove {
+  height: 3px;
+  margin-inline: 3%;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, black 38%, transparent) 20%,
+    color-mix(in oklab, black 38%, transparent) 80%,
+    transparent
+  );
+  box-shadow: 0 1px 0 color-mix(in oklab, var(--color-straw) 22%, transparent);
+}
+
+.yard {
+  touch-action: manipulation;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 2.75rem;
+  overflow: visible;
+  border-radius: 50%;
+  border: 4px solid color-mix(in oklab, var(--color-wood) 82%, black);
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in oklab, var(--color-straw) 28%, transparent) 0 22%, transparent 48%),
+    radial-gradient(circle at 34% 38%, color-mix(in oklab, var(--color-grass) 70%, white) 0 28%, transparent 52%),
+    radial-gradient(circle at 68% 62%, color-mix(in oklab, var(--color-grass-dark) 55%, transparent) 0 24%, transparent 50%),
+    url("/art/pit.jpg"),
+    var(--color-grass);
+  background-size: auto, auto, auto, cover, auto;
+  background-position: center;
+  box-shadow:
+    inset 0 0 0 10px color-mix(in oklab, var(--color-wood) 18%, transparent),
+    0 1px 0 color-mix(in oklab, var(--color-straw) 30%, transparent);
+}
+
+.yard-fence {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.yard-wire {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 50%;
+  background-image:
+    repeating-linear-gradient(
+      30deg,
+      transparent 0 6px,
+      color-mix(in oklab, #d5ddd8 82%, var(--color-wood-dark)) 6px 6.8px
+    ),
+    repeating-linear-gradient(
+      -30deg,
+      transparent 0 6px,
+      color-mix(in oklab, #d5ddd8 82%, var(--color-wood-dark)) 6px 6.8px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 8px,
+      color-mix(in oklab, #c3ccc7 70%, var(--color-wood-dark)) 8px 8.6px
+    );
+  mask-image: radial-gradient(circle, transparent 64%, black 70%, black 86%, transparent 94%);
+  -webkit-mask-image: radial-gradient(circle, transparent 64%, black 70%, black 86%, transparent 94%);
+}
+
+.yard-rim {
+  position: absolute;
+  inset: 2px;
+  z-index: 4;
+  border-radius: 50%;
+  border: 3px solid color-mix(in oklab, var(--color-wood) 62%, var(--color-straw));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, black 22%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--color-wood-dark) 35%, transparent);
+}
+
+.yard-post {
+  position: absolute;
+  z-index: 5;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 32%, color-mix(in oklab, var(--color-straw) 40%, var(--color-wood)), var(--color-wood-dark));
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-wood-dark) 55%, transparent),
+    0 1px 1px color-mix(in oklab, black 35%, transparent);
+}
+
+.yard-flock {
+  z-index: 2;
+}
+
+.yard-legal {
+  outline: 3px solid color-mix(in oklab, var(--color-straw) 88%, white);
+  outline-offset: 3px;
+  animation: yard-pulse 1.8s ease-in-out infinite;
+}
+
+.yard-hot {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.yard-drop {
+  filter: brightness(1.12);
+  outline: 3px solid color-mix(in oklab, var(--color-straw) 70%, white);
+  outline-offset: 2px;
+}
+
+.yard-land {
+  outline: 3px solid var(--color-straw);
+  outline-offset: 3px;
+}
+
+@keyframes yard-pulse {
+  0%,
+  100% {
+    outline-color: color-mix(in oklab, var(--color-straw) 70%, white);
+  }
+  50% {
+    outline-color: color-mix(in oklab, var(--color-straw) 100%, white);
+  }
+}
+
+.coop-turn {
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 16%, transparent),
+    0 0 0 2px color-mix(in oklab, var(--color-straw) 55%, white);
+}
+
+.yard:focus-visible {
+  outline: 3px solid var(--color-ring);
+  outline-offset: 3px;
+}
+
+.pit-count {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  top: 10%;
+  z-index: 12;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-wood-dark) 88%, black);
+  padding: 0.05rem 0.4rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  line-height: 1.2;
+  color: var(--color-primary-fg);
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 2px color-mix(in oklab, black 35%, transparent);
+}
+
+.coop-house {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 0.85rem;
+  border: 2px solid color-mix(in oklab, var(--color-wood-dark) 70%, black);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, white 10%, transparent), color-mix(in oklab, black 28%, transparent)),
+    url("/art/wood.jpg");
+  background-size: cover;
+  background-position: center;
+  padding: 0.3rem 0.25rem;
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 16%, transparent),
+    inset 0 -8px 12px color-mix(in oklab, black 28%, transparent);
+}
+
+.coop-house[data-end="top"],
+.coop-house[data-end="bottom"] {
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.coop-extra {
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 16%, transparent),
+    0 0 0 2px var(--color-straw);
+}
+
+.coop-mark {
+  position: relative;
+  z-index: 2;
+  height: 36%;
+  width: auto;
+  max-width: 88%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 3px color-mix(in oklab, black 40%, transparent));
+}
+
+.coop-house[data-end="top"] .coop-mark,
+.coop-house[data-end="bottom"] .coop-mark {
+  height: 86%;
+  max-width: 22%;
+}
+
+.coop-copy {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  text-align: center;
+  color: var(--color-primary-fg);
+}
+
+.coop-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-inline: 0.2rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--color-primary-fg) 88%, transparent);
+}
+
+.coop-count {
+  font-family: var(--font-display);
+  font-size: clamp(1.15rem, 4vw, 2.1rem);
+  line-height: 0.95;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px color-mix(in oklab, black 50%, transparent);
+}
+
+.coop-kicker {
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--color-primary-fg) 70%, transparent);
+}
+
+.coop-yard {
+  position: relative;
+  z-index: 1;
+  margin-top: 0.1rem;
+  min-height: 0;
+  width: 86%;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 0.45rem;
+  background:
+    radial-gradient(120% 80% at 50% 110%, color-mix(in oklab, var(--color-straw) 40%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--color-grass) 0%, var(--color-grass-dark) 100%);
+  box-shadow: inset 0 4px 8px color-mix(in oklab, black 28%, transparent);
+}
+
+.coop-house[data-end="top"] .coop-yard,
+.coop-house[data-end="bottom"] .coop-yard {
+  width: 30%;
+  height: 100%;
+  margin-top: 0;
+  flex: 0 0 30%;
+}
+
+.hen-pop {
+  animation: hen-pop var(--motion-fast) var(--ease-smooth-out);
+  transform: scale(var(--hen-scale, 1));
+}
+
+@keyframes hen-pop {
+  from {
+    transform: scale(calc(var(--hen-scale, 1) * 0.72));
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(var(--hen-scale, 1));
+    opacity: 1;
+  }
+}
+
+.shake {
+  animation: board-shake 420ms var(--ease-smooth-out);
+}
+
+@keyframes board-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px) rotate(-0.4deg);
+  }
+  55% {
+    transform: translateX(3px) rotate(0.3deg);
+  }
+}
+
+.fly-hen {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  width: 2.4rem;
+  height: 2.4rem;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 4px color-mix(in oklab, black 40%, transparent));
+  transition:
+    left 130ms var(--ease-smooth-out),
+    top 130ms var(--ease-smooth-out),
+    transform 130ms var(--ease-smooth-out);
+}
+
+.series-pips {
+  display: flex;
+  justify-content: center;
+  gap: 0.2rem;
+  margin-top: 0.2rem;
+}
+
+.pip-on,
+.pip-off {
+  display: block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+}
+
+.pip-on {
+  background: var(--color-primary);
+}
+
+.pip-off {
+  background: color-mix(in oklab, var(--color-wood) 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-wood) 35%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hen-pop,
+  .shake,
+  .fly-hen,
+  .yard-legal {
+    animation: none;
+    transition: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .board-grid {
+    gap: 0.28rem;
+    padding: 0.4rem;
+  }
+
+  .coop-kicker {
+    display: none;
+  }
+}

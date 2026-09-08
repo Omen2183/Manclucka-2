@@ -1,0 +1,14 @@
+Manclucka farm SFX — public domain recordings from Wikimedia Commons / PDSounds.
+
+- rooster.mp3 — "Rooster crowing.ogg" by Filo gèn' (own work, 2021), CC0/PD
+  https://commons.wikimedia.org/wiki/File:Rooster_crowing.ogg
+- rooster-b.mp3, crow-long.mp3 — "Small rooster crowing.ogg" by alys (PDSounds #540), public domain
+  https://commons.wikimedia.org/wiki/File:Small_rooster_crowing.ogg
+- cluck-a/b/c.mp3 — "Hens leaving coop.ogg" by alys (PDSounds #541), public domain
+  https://commons.wikimedia.org/wiki/File:Hens_leaving_coop.ogg
+- cluck-d/e.mp3, chatter.mp3 — "Chickens demanding food.ogg" by alys (PDSounds), public domain
+  https://commons.wikimedia.org/wiki/File:Chickens_demanding_food.ogg
+- scared.mp3, scared-b.mp3 — "Hen announcing shes lain an egg.ogg" by alys (PDSounds), public domain
+  https://commons.wikimedia.org/wiki/File:Hen_announcing_shes_lain_an_egg.ogg
+
+Trimmed, mono, loudness-normalized for the game. No rights reserved on the source recordings.
