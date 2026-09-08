@@ -1,16 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LobbyScreen } from "@/components/game/LobbyScreen";
 import { MenuScreen } from "@/components/game/MenuScreen";
 import { PlayScreen } from "@/components/game/PlayScreen";
 import { RulesScreen } from "@/components/game/RulesScreen";
 import { SetupScreen } from "@/components/game/SetupScreen";
 import { Button } from "@/components/ui/button";
+import { initialState } from "@/game/engine";
 import { pickOpponentName } from "@/game/names";
 import { parseNetMessage, type NetMessage } from "@/game/net";
 import { emptySeries, seriesNeed, tallyGame } from "@/game/series";
 import type { GameState, MatchSettings, Player, Winner } from "@/game/types";
+import { LOBBY_EMPTY_MS, lookupErrorCopy, lookupFlock, normalizeFlockCode } from "@/lib/multiplayer/lookup";
 import { useP2PRoom } from "@/lib/multiplayer";
-import { loadSettingsPatch, recordGame, saveSettings } from "@/lib/persist";
+import {
+  clearMatchSnapshot,
+  loadMatchSnapshot,
+  loadSettingsPatch,
+  recordGame,
+  saveMatchSnapshot,
+  saveSettings,
+  type MatchSnapshot,
+  type SeriesGate,
+} from "@/lib/persist";
 import { loadName, makeRoomCode, saveName } from "@/lib/utils";
 
 type Screen = "menu" | "setup" | "lobby" | "play" | "rules";
@@ -24,12 +35,24 @@ const DEFAULTS: MatchSettings = {
   friendName: "Friend",
 };
 
+function dropMatchHistory() {
+  if (typeof window === "undefined") return;
+  if (window.history.state?.manclucka === "match") {
+    window.history.replaceState(null, "");
+  }
+}
+
 export function MancluckaApp() {
   const [screen, setScreen] = useState<Screen>("menu");
   const [settings, setSettings] = useState<MatchSettings>(DEFAULTS);
   const [joinCode, setJoinCode] = useState("");
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
   const [room, setRoom] = useState<string | null>(null);
   const [host, setHost] = useState(true);
+  const [resumeOffer, setResumeOffer] = useState<MatchSnapshot | null>(null);
+  const [resumeSnap, setResumeSnap] = useState<MatchSnapshot | null>(null);
+  const [lobbyGen, setLobbyGen] = useState(0);
 
   useEffect(() => {
     const stored = loadName();
@@ -39,7 +62,20 @@ export function MancluckaApp() {
       ...patch,
       playerName: stored && stored !== DEFAULTS.playerName ? stored : s.playerName,
     }));
+    setResumeOffer(loadMatchSnapshot());
   }, []);
+
+  const inMatch = screen === "play" || screen === "lobby";
+  const leaveRef = useRef(() => {});
+  leaveRef.current = () => leaveToSetup();
+
+  useEffect(() => {
+    if (!inMatch) return;
+    window.history.pushState({ manclucka: "match" }, "");
+    const onPop = () => leaveRef.current();
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [inMatch]);
 
   function patchSettings(patch: Partial<MatchSettings>) {
     setSettings((s) => {
@@ -50,8 +86,114 @@ export function MancluckaApp() {
     });
   }
 
+  function cleanOnlineDraft(next: MatchSettings): MatchSettings {
+    if (next.mode !== "online") return next;
+    const reset = { ...next, mode: "solo" as const };
+    saveSettings(reset);
+    return reset;
+  }
+
+  function leaveToSetup() {
+    clearMatchSnapshot();
+    setResumeSnap(null);
+    setResumeOffer(null);
+    setJoinCode("");
+    setJoinError(null);
+    setJoining(false);
+    setRoom(null);
+    dropMatchHistory();
+    setSettings((s) => cleanOnlineDraft(s));
+    setScreen("setup");
+  }
+
+  function leaveToMenu() {
+    clearMatchSnapshot();
+    setResumeSnap(null);
+    setResumeOffer(null);
+    setJoinCode("");
+    setJoinError(null);
+    setJoining(false);
+    setRoom(null);
+    dropMatchHistory();
+    setSettings((s) => cleanOnlineDraft(s));
+    setScreen("menu");
+  }
+
+  function applyResume(snap: MatchSnapshot) {
+    setResumeOffer(null);
+    setResumeSnap(snap);
+    setSettings(snap.settings);
+    saveSettings(snap.settings);
+    if (snap.settings.mode === "online" && snap.room) {
+      setHost(snap.host);
+      setRoom(snap.room);
+      setScreen("lobby");
+    } else {
+      setRoom(null);
+      setScreen("play");
+    }
+  }
+
+  async function tryJoin() {
+    const code = normalizeFlockCode(joinCode);
+    if (code.length < 6 || joining) return;
+    setJoining(true);
+    setJoinError(null);
+    const result = await lookupFlock(code);
+    setJoining(false);
+    if (!result.ok) {
+      setJoinError(lookupErrorCopy(result.reason));
+      return;
+    }
+    if (!result.exists) {
+      setJoinError(lookupErrorCopy("missing"));
+      return;
+    }
+    saveName(settings.playerName);
+    setHost(false);
+    setRoom(code);
+    setScreen("lobby");
+  }
+
   if (screen === "menu") {
-    return <MenuScreen onPlay={() => setScreen("setup")} onRules={() => setScreen("rules")} />;
+    return (
+      <>
+        <MenuScreen onPlay={() => setScreen("setup")} onRules={() => setScreen("rules")} />
+        {resumeOffer ? (
+          <div className="fixed inset-0 z-40 flex items-end justify-center bg-wood-dark/55 p-4 sm:items-center">
+            <div
+              className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-lg"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="resume-title"
+            >
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">match in progress</p>
+              <p id="resume-title" className="mt-1 font-display text-2xl">
+                Resume match?
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                A yard was still in play. Resume to pick it up, or leave to start clean.
+              </p>
+              <div className="mt-4 flex flex-col gap-2">
+                <Button size="lg" onClick={() => applyResume(resumeOffer)}>
+                  Resume match
+                </Button>
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  onClick={() => {
+                    clearMatchSnapshot();
+                    setResumeOffer(null);
+                  }}
+                >
+                  Leave match
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </>
+    );
   }
   if (screen === "rules") {
     return <RulesScreen onBack={() => setScreen("menu")} />;
@@ -61,27 +203,33 @@ export function MancluckaApp() {
       <SetupScreen
         settings={settings}
         joinCode={joinCode}
+        joinError={joinError}
+        joining={joining}
         onChange={patchSettings}
-        onJoinCode={setJoinCode}
-        onBack={() => setScreen("menu")}
+        onJoinCode={(code) => {
+          setJoinCode(code);
+          if (joinError) setJoinError(null);
+        }}
+        onBack={() => {
+          setJoinCode("");
+          setJoinError(null);
+          setJoining(false);
+          setScreen("menu");
+        }}
         onStart={() => {
           saveName(settings.playerName);
+          setResumeSnap(null);
           if (settings.mode === "online") {
             setHost(true);
             setRoom(makeRoomCode());
             setScreen("lobby");
           } else {
             setRoom(null);
+            setResumeSnap(null);
             setScreen("play");
           }
         }}
-        onJoin={() => {
-          if (joinCode.length < 6) return;
-          saveName(settings.playerName);
-          setHost(false);
-          setRoom(joinCode);
-          setScreen("lobby");
-        }}
+        onJoin={() => void tryJoin()}
       />
     );
   }
@@ -89,34 +237,47 @@ export function MancluckaApp() {
   if (screen === "lobby" && room) {
     return (
       <OnlineShell
-        key={room}
+        key={`${room}-${lobbyGen}`}
         room={room}
         host={host}
         settings={settings}
-        onBack={() => {
-          setRoom(null);
-          setScreen("setup");
-        }}
-        onLeaveToMenu={() => {
-          setRoom(null);
-          setScreen("menu");
+        resume={resumeSnap?.settings.mode === "online" ? resumeSnap : null}
+        onBack={leaveToSetup}
+        onLeaveToMenu={leaveToMenu}
+        onRetryJoin={() => {
+          setLobbyGen((n) => n + 1);
         }}
       />
     );
   }
 
   if (screen === "play") {
-    return <LocalMatch settings={settings} onBack={() => setScreen("setup")} />;
+    return (
+      <LocalMatch
+        settings={settings}
+        resume={resumeSnap && resumeSnap.settings.mode !== "online" ? resumeSnap : null}
+        onBack={leaveToSetup}
+      />
+    );
   }
 
   return <MenuScreen onPlay={() => setScreen("setup")} onRules={() => setScreen("rules")} />;
 }
 
-function LocalMatch({ settings, onBack }: { settings: MatchSettings; onBack: () => void }) {
+function LocalMatch({
+  settings,
+  resume,
+  onBack,
+}: {
+  settings: MatchSettings;
+  resume: MatchSnapshot | null;
+  onBack: () => void;
+}) {
   const names = useMemo<[string, string]>(() => {
+    if (resume) return resume.names;
     if (settings.mode === "hotseat") return [settings.playerName || "Keeper", settings.friendName || "Friend"];
     return [settings.playerName || "Keeper", pickOpponentName(settings.playerName)];
-  }, [settings.mode, settings.playerName, settings.friendName]);
+  }, [settings.mode, settings.playerName, settings.friendName, resume]);
 
   const humanPlayers = useMemo(() => {
     if (settings.mode === "hotseat") return new Set<Player>([0, 1]);
@@ -127,10 +288,12 @@ function LocalMatch({ settings, onBack }: { settings: MatchSettings; onBack: () 
     <SeriesMatch
       settings={settings}
       names={names}
-      south={0}
+      south={resume?.south ?? 0}
       humanPlayers={humanPlayers}
       aiPlayer={settings.mode === "solo" ? 1 : null}
       onBack={onBack}
+      resume={resume}
+      persistMeta={{ host: true, room: null, phase: "play" }}
     />
   );
 }
@@ -146,6 +309,8 @@ function SeriesMatch({
   onMoveCommitted,
   onRequestNext,
   remoteNext,
+  resume,
+  persistMeta,
 }: {
   settings: MatchSettings;
   names: [string, string];
@@ -157,14 +322,45 @@ function SeriesMatch({
   onMoveCommitted?: (pit: number, next: GameState) => void;
   onRequestNext?: (gameIndex: number) => void;
   remoteNext?: number;
+  resume?: MatchSnapshot | null;
+  persistMeta: { host: boolean; room: string | null; phase: "play" | "lobby" };
 }) {
-  const [scores, setScores] = useState<[number, number]>([0, 0]);
-  const [gameIndex, setGameIndex] = useState(0);
-  const [gate, setGate] = useState<"play" | "between" | "over">("play");
-  const [lastWinner, setLastWinner] = useState<Winner | null>(null);
-  const [lastCoops, setLastCoops] = useState<[number, number]>([0, 0]);
+  const [scores, setScores] = useState<[number, number]>(() => resume?.scores ?? [0, 0]);
+  const [gameIndex, setGameIndex] = useState(() => resume?.gameIndex ?? 0);
+  const [gate, setGate] = useState<SeriesGate>(() => resume?.gate ?? "play");
+  const [lastWinner, setLastWinner] = useState<Winner | null>(() => resume?.lastWinner ?? null);
+  const [lastCoops, setLastCoops] = useState<[number, number]>(() => resume?.lastCoops ?? [0, 0]);
   const [matchKey, setMatchKey] = useState(0);
+  const [board, setBoard] = useState<GameState>(() => resume?.board ?? initialState(settings.rules, 0));
   const need = seriesNeed(settings.bestOf);
+
+  function persist(nextBoard: GameState, nextScores: [number, number], nextGate: SeriesGate, nextIndex: number) {
+    if (nextGate === "over") {
+      clearMatchSnapshot();
+      return;
+    }
+    saveMatchSnapshot({
+      v: 1,
+      savedAt: Date.now(),
+      phase: persistMeta.phase,
+      settings,
+      names,
+      south,
+      scores: nextScores,
+      gameIndex: nextIndex,
+      gate: nextGate,
+      lastWinner,
+      lastCoops,
+      board: nextBoard,
+      host: persistMeta.host,
+      room: persistMeta.room,
+    });
+  }
+
+  useEffect(() => {
+    persist(board, scores, gate, gameIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [board, scores, gate, gameIndex, names, settings, south]);
 
   useEffect(() => {
     if (remoteNext == null) return;
@@ -172,8 +368,9 @@ function SeriesMatch({
       setGameIndex(remoteNext);
       setGate("play");
       setLastWinner(null);
+      setBoard(initialState(settings.rules, 0));
     }
-  }, [remoteNext, gameIndex]);
+  }, [remoteNext, gameIndex, settings.rules]);
 
   function handleGameOver(winner: Winner, coops: [number, number]) {
     setLastWinner(winner);
@@ -189,17 +386,21 @@ function SeriesMatch({
   function nextGame() {
     if (gate !== "between") return;
     const next = gameIndex + 1;
+    const fresh = initialState(settings.rules, 0);
     setGameIndex(next);
     setGate("play");
     setLastWinner(null);
+    setBoard(fresh);
     onRequestNext?.(next);
   }
 
   function rematch() {
+    const fresh = initialState(settings.rules, 0);
     setScores(emptySeries().scores);
     setGameIndex(0);
     setGate("play");
     setLastWinner(null);
+    setBoard(fresh);
     setMatchKey((k) => k + 1);
     onRequestNext?.(0);
   }
@@ -217,6 +418,8 @@ function SeriesMatch({
         aiPlayer={aiPlayer}
         scores={scores}
         gameIndex={gameIndex}
+        seed={board}
+        onBoardSettled={setBoard}
         onBack={onBack}
         onGameOver={handleGameOver}
         onMoveCommitted={onMoveCommitted}
@@ -225,7 +428,7 @@ function SeriesMatch({
       {gate !== "play" && lastWinner != null && (
         <div className="fixed inset-0 z-30 flex items-end justify-center bg-wood-dark/55 p-4 sm:items-center">
           <div
-            className="series-card w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-lg"
+            className="series-card w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-lg"
             role="dialog"
             aria-modal="true"
             aria-labelledby="series-title"
@@ -283,27 +486,83 @@ function OnlineShell({
   room,
   host,
   settings,
+  resume,
   onBack,
   onLeaveToMenu,
+  onRetryJoin,
 }: {
   room: string;
   host: boolean;
   settings: MatchSettings;
+  resume: MatchSnapshot | null;
   onBack: () => void;
   onLeaveToMenu: () => void;
+  onRetryJoin: () => void;
 }) {
   const p2p = useP2PRoom({ room, name: settings.playerName || "Keeper" });
-  const [peerName, setPeerName] = useState<string | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [names, setNames] = useState<[string, string]>([settings.playerName || "Keeper", "Keeper"]);
+  const [peerName, setPeerName] = useState<string | null>(resume?.names[host ? 1 : 0] ?? null);
+  const [playing, setPlaying] = useState(() => resume?.phase === "play");
+  const [names, setNames] = useState<[string, string]>(
+    () => resume?.names ?? [settings.playerName || "Keeper", "Keeper"],
+  );
   const [incoming, setIncoming] = useState<{ pit: number; seq: number }[]>([]);
   const [remoteNext, setRemoteNext] = useState<number | undefined>(undefined);
   const [seq, setSeq] = useState(0);
   const [syncedSettings, setSyncedSettings] = useState(settings);
+  const [emptyTimeout, setEmptyTimeout] = useState(false);
 
   const peer = p2p.peers[0];
   const connected = peer?.connectionState === "connected";
   const failed = peer?.connectionState === "failed";
+
+  useEffect(() => {
+    if (playing || host) return;
+    const t = window.setTimeout(() => {
+      if (!connected && p2p.peers.length === 0) setEmptyTimeout(true);
+    }, LOBBY_EMPTY_MS);
+    return () => window.clearTimeout(t);
+  }, [playing, host, connected, p2p.peers.length]);
+
+  useEffect(() => {
+    if (playing || host) return;
+    saveMatchSnapshot({
+      v: 1,
+      savedAt: Date.now(),
+      phase: "lobby",
+      settings,
+      names,
+      south: host ? 0 : 1,
+      scores: [0, 0],
+      gameIndex: 0,
+      gate: "play",
+      lastWinner: null,
+      lastCoops: [0, 0],
+      board: initialState(settings.rules, 0),
+      host,
+      room,
+    });
+  }, [playing, host, settings, names, room]);
+
+  useEffect(() => {
+    if (host && !playing) {
+      saveMatchSnapshot({
+        v: 1,
+        savedAt: Date.now(),
+        phase: "lobby",
+        settings,
+        names,
+        south: 0,
+        scores: [0, 0],
+        gameIndex: 0,
+        gate: "play",
+        lastWinner: null,
+        lastCoops: [0, 0],
+        board: initialState(settings.rules, 0),
+        host: true,
+        room,
+      });
+    }
+  }, [host, playing, settings, names, room]);
 
   useEffect(() => {
     if (peer?.name) setPeerName(peer.name);
@@ -354,6 +613,16 @@ function OnlineShell({
     setPlaying(true);
   }
 
+  async function retryJoin() {
+    setEmptyTimeout(false);
+    const result = await lookupFlock(room);
+    if (!result.ok || !result.exists) {
+      onBack();
+      return;
+    }
+    onRetryJoin();
+  }
+
   if (!playing) {
     return (
       <LobbyScreen
@@ -364,8 +633,10 @@ function OnlineShell({
         peerName={peerName}
         connected={connected}
         failed={!!failed}
+        emptyTimeout={emptyTimeout}
         onStart={startMatch}
         onBack={onBack}
+        onRetry={host ? undefined : () => void retryJoin()}
       />
     );
   }
@@ -388,6 +659,8 @@ function OnlineShell({
         aiPlayer={null}
         incomingMoves={incoming}
         remoteNext={remoteNext}
+        resume={resume?.phase === "play" ? resume : null}
+        persistMeta={{ host, room, phase: "play" }}
         onBack={onLeaveToMenu}
         onMoveCommitted={(pit) => {
           const nextSeq = seq + 1;

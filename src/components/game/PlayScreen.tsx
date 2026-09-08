@@ -52,6 +52,8 @@ export function PlayScreen({
   onGameOver,
   onMoveCommitted,
   incomingMoves = [],
+  seed,
+  onBoardSettled,
 }: {
   settings: MatchSettings;
   names: [string, string];
@@ -64,8 +66,10 @@ export function PlayScreen({
   onGameOver: (winner: Player | "draw", coops: [number, number]) => void;
   onMoveCommitted?: (pit: number, next: GameState) => void;
   incomingMoves?: { pit: number; seq: number }[];
+  seed?: GameState;
+  onBoardSettled?: (next: GameState) => void;
 }) {
-  const [state, setState] = useState<GameState>(() => initialState(settings.rules, 0));
+  const [state, setState] = useState<GameState>(() => seed ?? initialState(settings.rules, 0));
   const [busy, setBusy] = useState(false);
   const [lastFrom, setLastFrom] = useState<number | null>(null);
   const [dropping, setDropping] = useState<number | null>(null);
@@ -227,6 +231,7 @@ export function PlayScreen({
     if (!alive.current) return;
     setState(planned.state);
     stateRef.current = planned.state;
+    onBoardSettled?.(planned.state);
 
     if (planned.extraTurn) {
       playExtraTurn();

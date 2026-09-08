@@ -1,4 +1,4 @@
-import { ArrowLeft, Swords, User, Users, Wifi } from "lucide-react";
+import { ArrowLeft, Loader2, Swords, User, Users, Wifi } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +19,8 @@ const SERIES: BestOf[] = [1, 3, 5, 7];
 export function SetupScreen({
   settings,
   joinCode,
+  joinError,
+  joining,
   onChange,
   onJoinCode,
   onBack,
@@ -27,6 +29,8 @@ export function SetupScreen({
 }: {
   settings: MatchSettings;
   joinCode: string;
+  joinError: string | null;
+  joining: boolean;
   onChange: (patch: Partial<MatchSettings>) => void;
   onJoinCode: (code: string) => void;
   onBack: () => void;
@@ -155,19 +159,33 @@ export function SetupScreen({
                 value={joinCode}
                 maxLength={6}
                 aria-label="Flock code"
-                className="font-mono uppercase tracking-[0.2em]"
+                aria-invalid={joinError ? true : undefined}
+                aria-describedby={joinError ? "flock-code-error" : undefined}
+                className={cn(
+                  "font-mono uppercase tracking-[0.2em]",
+                  joinError && "ring-2 ring-[#8B2E1F]/70",
+                )}
                 placeholder="CODE"
                 onChange={(e) => onJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && joinCode.length === 6 && !joining) onJoin();
+                }}
               />
-              <Button variant="secondary" disabled={joinCode.length < 6} onClick={onJoin}>
-                Join
+              <Button variant="secondary" disabled={joinCode.length < 6 || joining} onClick={onJoin}>
+                {joining ? <Loader2 className="animate-spin" /> : null}
+                {joining ? "Checking" : "Join"}
               </Button>
             </div>
+            {joinError ? (
+              <p id="flock-code-error" role="alert" className="mt-2 text-sm font-medium text-[#8B2E1F]">
+                {joinError}
+              </p>
+            ) : null}
           </div>
         )}
 
         <div className="sticky bottom-0 -mx-4 border-t border-border bg-bg/95 px-4 py-3 backdrop-blur-sm pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <Button size="lg" className="w-full" onClick={onStart}>
+        <Button size="lg" className="w-full" onClick={onStart} disabled={joining}>
           <Swords />
           {settings.mode === "online" ? "Host a flock" : "Start"}
         </Button>

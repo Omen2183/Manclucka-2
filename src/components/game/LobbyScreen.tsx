@@ -12,8 +12,10 @@ export function LobbyScreen({
   peerName,
   connected,
   failed,
+  emptyTimeout,
   onStart,
   onBack,
+  onRetry,
 }: {
   code: string;
   host: boolean;
@@ -22,10 +24,13 @@ export function LobbyScreen({
   peerName: string | null;
   connected: boolean;
   failed: boolean;
+  emptyTimeout: boolean;
   onStart: () => void;
   onBack: () => void;
+  onRetry?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const stuck = !host && !connected && (failed || emptyTimeout);
 
   async function copy() {
     try {
@@ -43,7 +48,7 @@ export function LobbyScreen({
         <ArrowLeft />
         Leave
       </Button>
-      <h1 className="font-display text-3xl">{host ? "Your flock code" : "Joining flock"}</h1>
+      <h1 className="font-display text-3xl">{host ? "Your flock code" : stuck ? "Could not join" : "Joining flock"}</h1>
       <p className="mt-1 text-sm text-muted">
         {RULE_LABELS[settings.rules]} · best of {settings.bestOf}
       </p>
@@ -69,12 +74,16 @@ export function LobbyScreen({
             <span className="text-muted">waiting</span>
           )}
         </p>
-        <p className="text-muted">
-          {failed
-            ? "Could not open a direct path. Try again, or play pass-and-play on one device."
-            : connected
-              ? "Yard linked. Ready when you are."
-              : "Linking the yards"}
+        <p className={stuck ? "font-medium text-[#8B2E1F]" : "text-muted"}>
+          {stuck
+            ? emptyTimeout
+              ? "No flock with that code — or the host already left."
+              : "Could not open a direct path. Try again, or play pass-and-play on one device."
+            : failed
+              ? "Could not open a direct path. Try again, or play pass-and-play on one device."
+              : connected
+                ? "Yard linked. Ready when you are."
+                : "Linking the yards"}
         </p>
       </div>
 
@@ -87,6 +96,17 @@ export function LobbyScreen({
             </>
           )}
         </Button>
+      ) : stuck ? (
+        <div className="mt-6 flex flex-col gap-2">
+          {onRetry ? (
+            <Button size="lg" onClick={onRetry}>
+              Retry
+            </Button>
+          ) : null}
+          <Button size="lg" variant="secondary" onClick={onBack}>
+            Cancel
+          </Button>
+        </div>
       ) : (
         <p className="mt-6 flex items-center justify-center gap-2 text-sm text-muted">
           <Loader2 className="size-4 animate-spin" />

@@ -182,7 +182,36 @@ function handleGetMem(room: string, peer: string, name: string, since: number) {
   return json({ peers, signals } satisfies RtcPollResponse);
 }
 
+async function countRoomPeersSql(sql: Sql, room: string): Promise<number> {
+  await ensureSchema(sql);
+  const rows = await sql.query<{ n: string | number }>(
+    `SELECT COUNT(*)::int AS n FROM webrtc_peers
+     WHERE room = $1 AND last_seen > now() - make_interval(secs => $2)`,
+    [room, 30],
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
+function countRoomPeersMem(room: string): number {
+  const now = Date.now();
+  pruneMem(now);
+  let n = 0;
+  for (const p of mem().peers.values()) {
+    if (p.room === room) n += 1;
+  }
+  return n;
+}
+
+async function handleLookup(url: URL): Promise<Response> {
+  const parsed = z.object({ room: ID }).safeParse({ room: url.searchParams.get("room") });
+  if (!parsed.success) return json({ error: "invalid query", exists: false, peers: 0 }, 400);
+  const sql = await getSqlOrNull();
+  const peers = sql ? await countRoomPeersSql(sql, parsed.data.room) : countRoomPeersMem(parsed.data.room);
+  return json({ exists: peers > 0, peers });
+}
+
 async function handleGet(url: URL): Promise<Response> {
+  if (url.searchParams.get("lookup") === "1") return handleLookup(url);
   const parsed = z
     .object({
       room: ID,
