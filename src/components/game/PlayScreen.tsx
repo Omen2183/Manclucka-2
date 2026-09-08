@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, RotateCw, Volume2, VolumeX } from "lucide-react";
+import { ArrowLeft, RotateCw } from "lucide-react";
 import { Board } from "@/components/game/Board";
 import { Button } from "@/components/ui/button";
+import { MixerButton } from "@/components/game/MixerButton";
 import { chooseAiMove, thinkMs } from "@/game/ai";
 import {
-  isMuted,
   playExtraTurn,
   playIllegal,
   playLose,
@@ -13,7 +13,6 @@ import {
   playSow,
   playWin,
   rumble,
-  setMuted,
   unlockAudio,
 } from "@/game/audio";
 import { breedFor } from "@/game/breeds";
@@ -76,7 +75,6 @@ export function PlayScreen({
   const [lastLand, setLastLand] = useState<number | null>(null);
   const [extraFor, setExtraFor] = useState<Player | null>(null);
   const [shake, setShake] = useState(false);
-  const [muted, setMutedUi] = useState(isMuted);
   const [banner, setBanner] = useState("");
   const [plies, setPlies] = useState(0);
   const [fly, setFly] = useState<{ src: string; x: number; y: number } | null>(null);
@@ -378,18 +376,7 @@ export function PlayScreen({
               <RotateCw className={cn(flipped && "rotate-90")} />
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={muted ? "Unmute" : "Mute"}
-            onClick={() => {
-              const next = !muted;
-              setMuted(next);
-              setMutedUi(next);
-            }}
-          >
-            {muted ? <VolumeX /> : <Volume2 />}
-          </Button>
+          <MixerButton />
         </header>
 
         <p className="play-status" role="status">

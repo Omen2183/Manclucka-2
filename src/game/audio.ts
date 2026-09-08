@@ -1,12 +1,13 @@
 /**
- * Farm mixer: real chicken recordings decoded into Web Audio buffers,
+ * Farm mixer: real chicken recordings + looping countryside beds,
  * with a tiny synth fallback if a clip fails to load (offline / first tap).
  */
 
-import { loadMuted, saveMuted } from "@/lib/persist";
+import { loadMixer, saveMixer, type MixerLevels } from "@/lib/persist";
 
-const MASTER_GAIN = 0.72;
 const MAX_VOICES = 8;
+const YARD_ROTATE_MIN_MS = 26000;
+const YARD_ROTATE_SPAN_MS = 22000;
 
 const BANKS = {
   sow: ["/sfx/cluck-a.mp3", "/sfx/cluck-b.mp3", "/sfx/cluck-c.mp3", "/sfx/cluck-d.mp3", "/sfx/cluck-e.mp3"],
@@ -17,16 +18,42 @@ const BANKS = {
   lose: ["/sfx/scared-b.mp3"],
 } as const;
 
+const YARD_BEDS = ["/sfx/yard-breeze.mp3", "/sfx/yard-geese.mp3", "/sfx/yard-garden.mp3", "/sfx/yard-noon.mp3"];
+
 type Cue = keyof typeof BANKS;
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let sfx: GainNode | null = null;
+let yard: GainNode | null = null;
 let unlocked = false;
-let muted = typeof window !== "undefined" ? loadMuted() : false;
 let voices = 0;
 let preloadStarted = false;
 const buffers = new Map<string, AudioBuffer>();
+
+let mix: MixerLevels = typeof window !== "undefined" ? loadMixer() : { master: 0.72, chickens: 1, yard: 0.42, muted: false };
+let muted = mix.muted;
+
+let yardWanted = 0;
+let yardSrc: AudioBufferSourceNode | null = null;
+let yardFade: GainNode | null = null;
+let yardTimer: ReturnType<typeof setTimeout> | null = null;
+let lastYardUrl = "";
+const mixListeners = new Set<(next: MixerLevels) => void>();
+
+function emitMix(): void {
+  const snapshot = getMixer();
+  for (const fn of mixListeners) fn(snapshot);
+}
+
+function applyGains(): void {
+  if (!ctx || !master || !sfx || !yard) return;
+  const t = ctx.currentTime;
+  const masterVal = muted || mix.muted ? 0 : mix.master;
+  master.gain.setTargetAtTime(masterVal, t, 0.04);
+  sfx.gain.setTargetAtTime(mix.chickens, t, 0.04);
+  yard.gain.setTargetAtTime(mix.yard, t, 0.08);
+}
 
 function ensure(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -35,16 +62,17 @@ function ensure(): AudioContext | null {
     ctx = new AC({ latencyHint: "interactive" });
     master = ctx.createGain();
     sfx = ctx.createGain();
+    yard = ctx.createGain();
     sfx.connect(master);
+    yard.connect(master);
     master.connect(ctx.destination);
-    master.gain.value = muted ? 0 : MASTER_GAIN;
-    sfx.gain.value = 0.95;
+    applyGains();
   }
   return ctx;
 }
 
 function allUrls(): string[] {
-  return [...new Set(Object.values(BANKS).flat())];
+  return [...new Set([...Object.values(BANKS).flat(), ...YARD_BEDS])];
 }
 
 async function decodeUrl(audio: AudioContext, url: string): Promise<void> {
@@ -60,7 +88,9 @@ function preload(): void {
   const audio = ensure();
   if (!audio || preloadStarted) return;
   preloadStarted = true;
-  void Promise.all(allUrls().map((url) => decodeUrl(audio, url).catch(() => undefined)));
+  void Promise.all(allUrls().map((url) => decodeUrl(audio, url).catch(() => undefined))).then(() => {
+    if (yardWanted > 0) ensureYardBed();
+  });
 }
 
 export function unlockAudio(): void {
@@ -69,18 +99,39 @@ export function unlockAudio(): void {
   if (audio.state === "suspended") void audio.resume();
   unlocked = true;
   preload();
+  if (yardWanted > 0) ensureYardBed();
 }
 
 export function isMuted(): boolean {
   return muted;
 }
 
+export function getMixer(): MixerLevels {
+  return { ...mix, muted };
+}
+
+export function subscribeMixer(fn: (next: MixerLevels) => void): () => void {
+  mixListeners.add(fn);
+  return () => mixListeners.delete(fn);
+}
+
+export function setMixer(patch: Partial<MixerLevels>): void {
+  mix = {
+    master: patch.master ?? mix.master,
+    chickens: patch.chickens ?? mix.chickens,
+    yard: patch.yard ?? mix.yard,
+    muted: patch.muted ?? mix.muted,
+  };
+  muted = mix.muted;
+  saveMixer(mix);
+  applyGains();
+  if (muted || mix.yard <= 0.01) stopYardBed();
+  else if (yardWanted > 0) ensureYardBed();
+  emitMix();
+}
+
 export function setMuted(next: boolean): void {
-  muted = next;
-  saveMuted(next);
-  if (master && ctx) {
-    master.gain.setTargetAtTime(next ? 0 : MASTER_GAIN, ctx.currentTime, 0.02);
-  }
+  setMixer({ muted: next });
 }
 
 function pick<T>(list: readonly T[]): T {
@@ -123,14 +174,6 @@ function playCue(cue: Cue, jitter = 0.08, gain = 0.9): void {
   const rate = 1 + (Math.random() * 2 - 1) * jitter;
   if (playBuffer(url, { rate, gain })) return;
   synthFallback(cue);
-}
-
-function noiseBuffer(audio: AudioContext, seconds: number): AudioBuffer {
-  const length = Math.floor(audio.sampleRate * seconds);
-  const buffer = audio.createBuffer(1, length, audio.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
-  return buffer;
 }
 
 function envGain(audio: AudioContext, dest: AudioNode, start: number, peak: number, attack: number, release: number): GainNode {
@@ -186,6 +229,94 @@ function synthFallback(cue: Cue): void {
   playTone(audio, sfx, "triangle", 520, t, 0.1, 0.16);
 }
 
+function stopYardBed(): void {
+  if (yardTimer) {
+    clearTimeout(yardTimer);
+    yardTimer = null;
+  }
+  const audio = ctx;
+  if (yardSrc && yardFade && audio) {
+    try {
+      yardFade.gain.cancelScheduledValues(audio.currentTime);
+      yardFade.gain.setTargetAtTime(0.0001, audio.currentTime, 0.12);
+      yardSrc.stop(audio.currentTime + 0.4);
+    } catch {
+      /* already stopped */
+    }
+  }
+  yardSrc = null;
+  yardFade = null;
+}
+
+function scheduleYardRotate(): void {
+  if (yardTimer) clearTimeout(yardTimer);
+  yardTimer = setTimeout(() => {
+    yardTimer = null;
+    if (yardWanted > 0 && !muted && mix.yard > 0.01) playYardBed();
+  }, YARD_ROTATE_MIN_MS + Math.random() * YARD_ROTATE_SPAN_MS);
+}
+
+function playYardBed(): void {
+  const audio = ensure();
+  if (!audio || !yard || !unlocked || muted || mix.yard <= 0.01) return;
+  const ready = YARD_BEDS.filter((url) => buffers.has(url) && url !== lastYardUrl);
+  const pool = ready.length ? ready : YARD_BEDS.filter((url) => buffers.has(url));
+  if (!pool.length) return;
+  const url = pick(pool);
+  const buf = buffers.get(url);
+  if (!buf) return;
+
+  const src = audio.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+  src.loopStart = Math.min(1.15, buf.duration * 0.06);
+  src.loopEnd = Math.max(src.loopStart + 4, buf.duration - 1.35);
+
+  const g = audio.createGain();
+  g.gain.value = 0.0001;
+  src.connect(g);
+  g.connect(yard);
+  src.start();
+  g.gain.exponentialRampToValueAtTime(1, audio.currentTime + 1.6);
+
+  if (yardSrc && yardFade) {
+    const oldSrc = yardSrc;
+    const oldG = yardFade;
+    oldG.gain.cancelScheduledValues(audio.currentTime);
+    oldG.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 2);
+    try {
+      oldSrc.stop(audio.currentTime + 2.15);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  lastYardUrl = url;
+  yardSrc = src;
+  yardFade = g;
+  src.onended = () => {
+    if (yardSrc === src) yardSrc = null;
+  };
+  scheduleYardRotate();
+}
+
+function ensureYardBed(): void {
+  if (!unlocked || muted || mix.yard <= 0.01 || yardWanted <= 0) return;
+  if (yardSrc) return;
+  playYardBed();
+}
+
+export function startYard(): void {
+  yardWanted += 1;
+  unlockAudio();
+  ensureYardBed();
+}
+
+export function stopYard(): void {
+  yardWanted = Math.max(0, yardWanted - 1);
+  if (yardWanted === 0) stopYardBed();
+}
+
 export function playSow(): void {
   playCue("sow", 0.12, 0.7);
 }
@@ -229,6 +360,11 @@ if (typeof window !== "undefined") {
   window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
   window.addEventListener("keydown", () => unlockAudio(), { once: true });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") unlockAudio();
+    if (document.visibilityState === "visible") {
+      unlockAudio();
+      if (yardWanted > 0) ensureYardBed();
+    } else {
+      stopYardBed();
+    }
   });
 }

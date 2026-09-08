@@ -1,5 +1,6 @@
 import { BookOpen, Play } from "lucide-react";
 import { HenMark } from "@/components/HenMark";
+import { MixerButton } from "@/components/game/MixerButton";
 import { Button } from "@/components/ui/button";
 import { HERO_SRC } from "@/game/breeds";
 import { loadStats } from "@/lib/persist";
@@ -15,7 +16,10 @@ export function MenuScreen({
   const stats = useMemo(() => loadStats(), []);
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-4 pb-10 pt-[max(2rem,env(safe-area-inset-top))]">
+    <div className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-4 pb-10 pt-[max(2rem,env(safe-area-inset-top))]">
+      <div className="absolute right-4 top-[max(0.75rem,env(safe-area-inset-top))]">
+        <MixerButton />
+      </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
         <img

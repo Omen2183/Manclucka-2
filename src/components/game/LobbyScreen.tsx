@@ -1,5 +1,6 @@
 import { ArrowLeft, Copy, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { MixerButton } from "@/components/game/MixerButton";
 import { Button } from "@/components/ui/button";
 import { RULE_LABELS } from "@/game/names";
 import type { MatchSettings } from "@/game/types";
@@ -43,11 +44,14 @@ export function LobbyScreen({
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col px-4 pb-10 pt-4">
-      <Button variant="ghost" className="mb-4 w-fit" onClick={onBack}>
-        <ArrowLeft />
-        Leave
-      </Button>
+    <div className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col px-4 pb-10 pt-4">
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <Button variant="ghost" className="w-fit" onClick={onBack}>
+          <ArrowLeft />
+          Leave
+        </Button>
+        <MixerButton />
+      </div>
       <h1 className="font-display text-3xl">{host ? "Your flock code" : stuck ? "Could not join" : "Joining flock"}</h1>
       <p className="mt-1 text-sm text-muted">
         {RULE_LABELS[settings.rules]} · best of {settings.bestOf}

@@ -5,6 +5,7 @@ const SETTINGS_KEY = "manclucka:settings";
 const MUTE_KEY = "manclucka:muted";
 const STATS_KEY = "manclucka:stats";
 const TIP_KEY = "manclucka:tipped";
+const MIXER_KEY = "manclucka:mixer";
 const MATCH_KEY = "manclucka:match";
 
 const MATCH_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -42,6 +43,57 @@ export function loadMuted(): boolean {
 export function saveMuted(muted: boolean): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
+}
+
+export interface MixerLevels {
+  master: number;
+  chickens: number;
+  yard: number;
+  muted: boolean;
+}
+
+export const DEFAULT_MIXER: MixerLevels = {
+  master: 0.72,
+  chickens: 1,
+  yard: 0.42,
+  muted: false,
+};
+
+function clamp01(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(1, Math.max(0, n));
+}
+
+export function loadMixer(): MixerLevels {
+  const muted = loadMuted();
+  if (typeof window === "undefined") return { ...DEFAULT_MIXER, muted };
+  try {
+    const raw = window.localStorage.getItem(MIXER_KEY);
+    if (!raw) return { ...DEFAULT_MIXER, muted };
+    const parsed = JSON.parse(raw) as Partial<MixerLevels>;
+    return {
+      master: parsed.master == null ? DEFAULT_MIXER.master : clamp01(Number(parsed.master)),
+      chickens: parsed.chickens == null ? DEFAULT_MIXER.chickens : clamp01(Number(parsed.chickens)),
+      yard: parsed.yard == null ? DEFAULT_MIXER.yard : clamp01(Number(parsed.yard)),
+      muted: typeof parsed.muted === "boolean" ? parsed.muted : muted,
+    };
+  } catch {
+    return { ...DEFAULT_MIXER, muted };
+  }
+}
+
+export function saveMixer(levels: MixerLevels): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    MIXER_KEY,
+    JSON.stringify({
+      master: clamp01(levels.master),
+      chickens: clamp01(levels.chickens),
+      yard: clamp01(levels.yard),
+      muted: !!levels.muted,
+    }),
+  );
+  saveMuted(!!levels.muted);
 }
 
 export function loadSettingsPatch(): Partial<MatchSettings> {

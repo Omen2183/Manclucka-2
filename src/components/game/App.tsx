@@ -5,6 +5,7 @@ import { PlayScreen } from "@/components/game/PlayScreen";
 import { RulesScreen } from "@/components/game/RulesScreen";
 import { SetupScreen } from "@/components/game/SetupScreen";
 import { Button } from "@/components/ui/button";
+import { startYard } from "@/game/audio";
 import { initialState } from "@/game/engine";
 import { pickOpponentName } from "@/game/names";
 import { parseNetMessage, type NetMessage } from "@/game/net";
@@ -63,6 +64,10 @@ export function MancluckaApp() {
       playerName: stored && stored !== DEFAULTS.playerName ? stored : s.playerName,
     }));
     setResumeOffer(loadMatchSnapshot());
+    startYard();
+    return () => {
+      /* yard keeps running for the session; stop on page hide via audio.ts */
+    };
   }, []);
 
   const inMatch = screen === "play" || screen === "lobby";
