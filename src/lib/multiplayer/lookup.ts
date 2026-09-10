@@ -1,9 +1,9 @@
 export type LookupOk = { ok: true; exists: boolean; peers: number };
-export type LookupFail = { ok: false; reason: "timeout" | "network" | "invalid" };
+export type LookupFail = { ok: false; reason: "timeout" | "network" | "invalid" | "full" };
 export type LookupResult = LookupOk | LookupFail;
 
 export const LOOKUP_TIMEOUT_MS = 4000;
-export const LOBBY_EMPTY_MS = 8000;
+export const LOBBY_EMPTY_MS = 20000;
 
 const ROOM_RE = /^[A-Z0-9_-]{1,64}$/;
 
@@ -30,12 +30,14 @@ export async function lookupFlock(
       signal: ctrl.signal,
       headers: { accept: "application/json" },
     });
+    if (res.status === 409) return { ok: false, reason: "full" };
     if (!res.ok) return { ok: false, reason: "network" };
     const body: unknown = await res.json();
     if (!body || typeof body !== "object") return { ok: false, reason: "network" };
     const rec = body as { exists?: unknown; peers?: unknown };
     if (typeof rec.exists !== "boolean") return { ok: false, reason: "network" };
     const peers = typeof rec.peers === "number" && Number.isFinite(rec.peers) ? rec.peers : 0;
+    if (peers >= 2) return { ok: false, reason: "full" };
     return { ok: true, exists: rec.exists && peers > 0, peers };
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") return { ok: false, reason: "timeout" };
@@ -49,6 +51,8 @@ export function lookupErrorCopy(reason: LookupFail["reason"] | "missing"): strin
   switch (reason) {
     case "missing":
       return "No flock with that code.";
+    case "full":
+      return "That yard already has two keepers.";
     case "timeout":
       return "That check took too long. Retry, or cancel.";
     case "network":

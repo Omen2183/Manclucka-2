@@ -5,8 +5,10 @@ import {
   initialState,
   isLegal,
   legalPits,
+  openerOf,
   pitsOf,
   scoreOf,
+  settleState,
   sideSum,
   tryMove,
 } from "./engine.ts";
@@ -154,4 +156,83 @@ test("every sow keeps all 48 chickens on the board", () => {
     assert.equal(flockCount(result.state.pits), STARTING_FLOCK);
     state = result.state;
   }
+});
+
+test("pitsOf returns a copy so callers cannot mutate the yard table", () => {
+  const yards = pitsOf(0);
+  yards.reverse();
+  assert.deepEqual([...pitsOf(0)], [0, 1, 2, 3, 4, 5]);
+  assert.equal(tryMove(initialState("classic"), 0)?.drops[0], 1);
+});
+
+test("openerOf alternates each game", () => {
+  assert.equal(openerOf(0), 0);
+  assert.equal(openerOf(1), 1);
+  assert.equal(openerOf(2), 0);
+  assert.equal(openerOf(-3), 0);
+  assert.equal(openerOf(Number.NaN), 0);
+});
+
+test("player 1 extra turn from pit 9", () => {
+  const result = tryMove(initialState("classic", 1), 9);
+  assert.ok(result);
+  assert.equal(result.extraTurn, true);
+  assert.deepEqual(result.drops, [10, 11, 12, 13]);
+  assert.equal(result.state.turn, 1);
+});
+
+test("tryMove does not mutate the input pits", () => {
+  const start = initialState("classic");
+  const before = start.pits.slice();
+  tryMove(start, 0);
+  assert.deepEqual(start.pits, before);
+  assert.equal(start.turn, 0);
+});
+
+test("settleState ends a classic board that already has an empty side", () => {
+  const stuck = stateWith([0, 0, 0, 0, 0, 0, 10, 2, 0, 0, 0, 0, 0, 8], 0, "classic");
+  const settled = settleState(stuck);
+  assert.equal(settled.ended, true);
+  assert.equal(settled.pits[13], 10);
+  assert.equal(settled.pits[6], 10);
+  assert.equal(flockCount(settled.pits), 20);
+  assert.equal(stuck.ended, false);
+});
+
+test("extra turn is cancelled when that sow empties the board", () => {
+  const pits = [0, 0, 0, 0, 0, 1, 20, 0, 0, 0, 0, 0, 0, 7];
+  const result = tryMove(stateWith(pits, 0, "classic"), 5);
+  assert.ok(result);
+  assert.equal(result.state.ended, true);
+  assert.equal(result.extraTurn, false);
+});
+
+test("first-empty settle matches tryMove when a capture empties the other side", () => {
+  const pits = [4, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 12];
+  const stuck = stateWith(pits, 0, "first-empty");
+  const settled = settleState(stuck);
+  assert.equal(settled.ended, true);
+  assert.equal(settled.pits[6], 14);
+  assert.equal(settled.pits[13], 12);
+  assert.equal(settled.winner, 0);
+});
+
+test("first-empty capture that empties the opponent still scoops to the mover", () => {
+  const pits = [0, 0, 0, 0, 1, 0, 10, 3, 0, 0, 0, 0, 2, 8];
+  const result = tryMove(stateWith(pits, 0, "first-empty"), 4);
+  assert.ok(result);
+  assert.ok(result.capture);
+  assert.equal(result.state.ended, true);
+  assert.equal(result.state.pits[6], 16);
+  assert.equal(sideSum(result.state.pits, 0), 0);
+  assert.equal(sideSum(result.state.pits, 1), 0);
+});
+
+test("until-empty extra turn is kept when the other side still has hens", () => {
+  const pits = [0, 0, 0, 0, 0, 1, 10, 2, 0, 0, 0, 0, 0, 8];
+  const result = tryMove(stateWith(pits, 0, "until-empty"), 5);
+  assert.ok(result);
+  assert.equal(result.state.ended, false);
+  assert.equal(result.extraTurn, true);
+  assert.ok(legalPits(result.state).every((i) => pitsOf(1).includes(i)));
 });

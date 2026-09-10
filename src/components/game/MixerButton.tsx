@@ -72,7 +72,7 @@ export function MixerButton({ className }: { className?: string }) {
       </Button>
       {open ? (
         <div
-          className="absolute right-0 z-40 mt-2 w-64 rounded-xl border border-border bg-surface p-3 shadow-lg"
+          className="farm-card absolute right-0 z-40 mt-2 w-64 rounded-xl p-3"
           role="dialog"
           aria-label="Sound"
         >

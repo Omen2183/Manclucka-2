@@ -39,6 +39,7 @@ export interface PeerInfo {
   candidateType: string | null;
   /** Data-channel ping RTT (ms), measured every 2s once connected. */
   rttMs: number | null;
+  reliableOpen: boolean;
 }
 
 export interface P2PRoomOptions {
@@ -52,6 +53,7 @@ export interface P2PRoomOptions {
   onMessage?: (from: string, data: unknown, channel: "state" | "reliable") => void;
   /** Fires once, on the first successful signaling poll (registration). */
   onConnected?: () => void;
+  onFull?: () => void;
 }
 
 interface PeerSlot {
@@ -134,10 +136,12 @@ export class P2PRoom {
     this.closed = true;
     if (this.pollTimer) clearTimeout(this.pollTimer);
     if (this.pingTimer) clearInterval(this.pingTimer);
+    this.opts.onPeersChanged = undefined;
+    this.opts.onMessage = undefined;
+    this.opts.onConnected = undefined;
+    this.opts.onFull = undefined;
     for (const slot of this.peers.values()) slot.pc.close();
     this.peers.clear();
-    // Leaving the roster is the teardown broadcast: everyone's next poll
-    // drops this peer and closes their side of the pair.
     void fetch("/api/rtc", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -147,20 +151,36 @@ export class P2PRoom {
   }
 
   /** Send on the unreliable game-state channel (drops stale packets). */
-  broadcast(data: unknown): void {
+  broadcast(data: unknown): boolean {
     const wire = JSON.stringify({ t: "d", d: data });
+    let sent = false;
     for (const slot of this.peers.values()) {
-      if (slot.state?.readyState === "open") slot.state.send(wire);
+      if (slot.state?.readyState !== "open") continue;
+      try {
+        slot.state.send(wire);
+        sent = true;
+      } catch {
+        /* channel closing */
+      }
     }
+    return sent;
   }
 
   /** Send reliably (ordered) to one peer, or to all when peerId is omitted. */
-  send(data: unknown, peerId?: string): void {
+  send(data: unknown, peerId?: string): boolean {
     const wire = JSON.stringify({ t: "d", d: data });
     const targets = peerId ? [this.peers.get(peerId)] : [...this.peers.values()];
+    let sent = false;
     for (const slot of targets) {
-      if (slot?.reliable?.readyState === "open") slot.reliable.send(wire);
+      if (slot?.reliable?.readyState !== "open") continue;
+      try {
+        slot.reliable.send(wire);
+        sent = true;
+      } catch {
+        /* channel closing */
+      }
     }
+    return sent;
   }
 
   peerList(): PeerInfo[] {
@@ -180,7 +200,7 @@ export class P2PRoom {
       // Terminal pairs (NAT-blocked after all recovery attempts) must not pin
       // the session at the 400ms fast-poll rate.
       if (s.terminal) continue;
-      if (s.info.connectionState !== "connected") return true;
+      if (s.info.connectionState !== "connected" || !s.info.reliableOpen) return true;
     }
     return false;
   }
@@ -194,6 +214,10 @@ export class P2PRoom {
     });
     const res = await fetch(`/api/rtc?${params}`);
     if (this.closed) return;
+    if (res.status === 409) {
+      this.opts.onFull?.();
+      return;
+    }
     if (!res.ok) throw new Error(`signaling poll failed: ${res.status}`);
     const body = (await res.json()) as RtcPollResponse;
     if (this.closed) return;
@@ -236,6 +260,7 @@ export class P2PRoom {
       if (!alive.has(id)) {
         slot.pc.close();
         this.peers.delete(id);
+        this.signalQueues.delete(id);
       }
     }
     this.emitPeers();
@@ -261,6 +286,7 @@ export class P2PRoom {
         connectionState: pc.connectionState,
         candidateType: null,
         rttMs: null,
+        reliableOpen: false,
       },
     };
     this.peers.set(peerId, slot);
@@ -315,19 +341,38 @@ export class P2PRoom {
   private attachChannel(slot: PeerSlot, channel: RTCDataChannel): void {
     if (channel.label === "state") slot.state = channel;
     else slot.reliable = channel;
-    channel.onopen = () => {
+    const markOpen = () => {
+      if (this.closed) return;
       slot.lastProgressAt = Date.now();
+      slot.info.reliableOpen = slot.reliable?.readyState === "open";
+      this.emitPeers();
+    };
+    channel.onopen = markOpen;
+    if (channel.readyState === "open") markOpen();
+    channel.onclose = () => {
+      slot.info.reliableOpen = slot.reliable?.readyState === "open";
+      this.emitPeers();
+    };
+    channel.onerror = () => {
+      slot.info.reliableOpen = slot.reliable?.readyState === "open";
+      this.emitPeers();
     };
     channel.onmessage = (e) => {
+      const raw = e.data;
+      if (typeof raw !== "string" || raw.length > 8192) return;
       let msg: { t: string; d?: unknown };
       try {
-        msg = JSON.parse(e.data as string) as { t: string; d?: unknown };
+        msg = JSON.parse(raw) as { t: string; d?: unknown };
       } catch {
         return;
       }
       if (msg.t === "ping") {
         if (slot.state?.readyState === "open") {
-          slot.state.send(JSON.stringify({ t: "pong" }));
+          try {
+            slot.state.send(JSON.stringify({ t: "pong" }));
+          } catch {
+            /* closing */
+          }
         }
       } else if (msg.t === "pong") {
         if (slot.pingSentAt) {
@@ -414,7 +459,7 @@ export class P2PRoom {
         if (!slot.pc.remoteDescription) {
           // Candidate raced ahead of its SDP — hold it until the description
           // lands (flushed after every successful setRemoteDescription).
-          slot.pendingCandidates.push(candidate);
+          if (slot.pendingCandidates.length < 32) slot.pendingCandidates.push(candidate);
           return;
         }
         try {
@@ -483,9 +528,12 @@ export class P2PRoom {
       const stale =
         slot.pingSentAt !== undefined && performance.now() - slot.pingSentAt > 2 * PING_INTERVAL_MS;
       if (slot.pingSentAt === undefined || stale) {
-        // A lost pong must not freeze rttMs forever: expire and re-ping.
         slot.pingSentAt = performance.now();
-        slot.state.send(wire);
+        try {
+          slot.state.send(wire);
+        } catch {
+          slot.pingSentAt = undefined;
+        }
       }
     }
   }
@@ -511,7 +559,7 @@ export class P2PRoom {
         if (live === "connecting" || live === "connected") slot.lastProgressAt = now;
         this.emitPeers();
       }
-      if (slot.terminal || live === "connected") continue;
+      if (slot.terminal || (live === "connected" && slot.info.reliableOpen)) continue;
       if (now - slot.lastProgressAt <= STALL_MS) continue;
       if (slot.recoveryAttempts >= MAX_RECOVERY_ATTEMPTS) {
         slot.terminal = true;
@@ -557,11 +605,10 @@ export class P2PRoom {
   }
 
   private emitPeers(): void {
-    // Only notify when something observable actually changed — React state
-    // setters otherwise re-render consumers on every poll/ping.
+    if (this.closed) return;
     const list = this.peerList();
     const fingerprint = JSON.stringify(
-      list.map((p) => [p.id, p.name, p.connectionState, p.candidateType, p.rttMs]),
+      list.map((p) => [p.id, p.name, p.connectionState, p.candidateType, p.rttMs, p.reliableOpen]),
     );
     if (fingerprint === this.lastPeersFingerprint) return;
     this.lastPeersFingerprint = fingerprint;

@@ -1,5 +1,7 @@
 {
   "title": "Manclucka 2",
   "type": "x:game",
-  "card": "custom"
+  "card": "custom",
+  "image": "/og.jpg",
+  "banner": "/x-banner.jpg"
 }

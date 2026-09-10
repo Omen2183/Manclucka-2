@@ -1,5 +1,6 @@
-import type { BestOf, Difficulty, GameState, MatchSettings, PlayMode, Player, RuleSet, Winner } from "@/game/types";
-import { PIT_COUNT } from "@/game/types";
+import { settleState, sideSum } from "../game/engine.ts";
+import type { BestOf, Difficulty, GameState, MatchSettings, PlayMode, Player, RuleSet, Winner } from "../game/types.ts";
+import { PIT_COUNT } from "../game/types.ts";
 
 const SETTINGS_KEY = "manclucka:settings";
 const MUTE_KEY = "manclucka:muted";
@@ -9,6 +10,43 @@ const MIXER_KEY = "manclucka:mixer";
 const MATCH_KEY = "manclucka:match";
 
 const MATCH_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const PEER_RE = /^p-[a-z0-9]{4,16}$/;
+
+function readStore(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStore(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+export function saveMatchSnapshot(snap: MatchSnapshot): void {
+  if (typeof window === "undefined") return;
+  try {
+    writeStore(MATCH_KEY, JSON.stringify({ ...snap, v: 1, savedAt: Date.now() }));
+  } catch {
+    /* quota / circular */
+  }
+}
+
+function removeStore(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
 
 export interface YardStats {
   played: number;
@@ -33,16 +71,16 @@ export interface MatchSnapshot {
   board: GameState;
   host: boolean;
   room: string | null;
+  peerId?: string;
+  seq?: number;
 }
 
 export function loadMuted(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(MUTE_KEY) === "1";
+  return readStore(MUTE_KEY) === "1";
 }
 
 export function saveMuted(muted: boolean): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
+  writeStore(MUTE_KEY, muted ? "1" : "0");
 }
 
 export interface MixerLevels {
@@ -66,9 +104,8 @@ function clamp01(n: number): number {
 
 export function loadMixer(): MixerLevels {
   const muted = loadMuted();
-  if (typeof window === "undefined") return { ...DEFAULT_MIXER, muted };
   try {
-    const raw = window.localStorage.getItem(MIXER_KEY);
+    const raw = readStore(MIXER_KEY);
     if (!raw) return { ...DEFAULT_MIXER, muted };
     const parsed = JSON.parse(raw) as Partial<MixerLevels>;
     return {
@@ -83,8 +120,7 @@ export function loadMixer(): MixerLevels {
 }
 
 export function saveMixer(levels: MixerLevels): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(
+  writeStore(
     MIXER_KEY,
     JSON.stringify({
       master: clamp01(levels.master),
@@ -97,9 +133,8 @@ export function saveMixer(levels: MixerLevels): void {
 }
 
 export function loadSettingsPatch(): Partial<MatchSettings> {
-  if (typeof window === "undefined") return {};
   try {
-    const raw = window.localStorage.getItem(SETTINGS_KEY);
+    const raw = readStore(SETTINGS_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as Partial<MatchSettings>;
     const patch: Partial<MatchSettings> = {};
@@ -112,11 +147,21 @@ export function loadSettingsPatch(): Partial<MatchSettings> {
     if (parsed.bestOf === 1 || parsed.bestOf === 3 || parsed.bestOf === 5 || parsed.bestOf === 7) {
       patch.bestOf = parsed.bestOf as BestOf;
     }
-    if (parsed.difficulty && parsed.difficulty >= 1 && parsed.difficulty <= 5) {
+    if (
+      typeof parsed.difficulty === "number" &&
+      Number.isInteger(parsed.difficulty) &&
+      parsed.difficulty >= 1 &&
+      parsed.difficulty <= 5
+    ) {
       patch.difficulty = parsed.difficulty as Difficulty;
     }
     if (typeof parsed.friendName === "string") {
-      patch.friendName = parsed.friendName.slice(0, 24);
+      const friend = parsed.friendName.replace(/[\u0000-\u001F\u007F\u200B-\u200F\u202A-\u202E]/g, "").replace(/\s+/g, " ").trim().slice(0, 24);
+      if (friend && !/^keeper$/i.test(friend)) patch.friendName = friend;
+    }
+    if (typeof parsed.playerName === "string") {
+      const name = parsed.playerName.replace(/[\u0000-\u001F\u007F\u200B-\u200F\u202A-\u202E]/g, "").replace(/\s+/g, " ").trim().slice(0, 24);
+      if (name && !/^keeper$/i.test(name)) patch.playerName = name;
     }
     return patch;
   } catch {
@@ -125,8 +170,7 @@ export function loadSettingsPatch(): Partial<MatchSettings> {
 }
 
 export function saveSettings(settings: MatchSettings): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(
+  writeStore(
     SETTINGS_KEY,
     JSON.stringify({
       mode: settings.mode,
@@ -134,14 +178,14 @@ export function saveSettings(settings: MatchSettings): void {
       bestOf: settings.bestOf,
       difficulty: settings.difficulty,
       friendName: settings.friendName,
+      playerName: settings.playerName,
     }),
   );
 }
 
 export function loadStats(): YardStats {
-  if (typeof window === "undefined") return { played: 0, won: 0 };
   try {
-    const raw = window.localStorage.getItem(STATS_KEY);
+    const raw = readStore(STATS_KEY);
     if (!raw) return { played: 0, won: 0 };
     const parsed = JSON.parse(raw) as YardStats;
     return {
@@ -157,20 +201,16 @@ export function recordGame(didWin: boolean): YardStats {
   const next = loadStats();
   next.played += 1;
   if (didWin) next.won += 1;
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(STATS_KEY, JSON.stringify(next));
-  }
+  writeStore(STATS_KEY, JSON.stringify(next));
   return next;
 }
 
 export function loadTipped(): boolean {
-  if (typeof window === "undefined") return true;
-  return window.localStorage.getItem(TIP_KEY) === "1";
+  return readStore(TIP_KEY) === "1";
 }
 
 export function saveTipped(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(TIP_KEY, "1");
+  writeStore(TIP_KEY, "1");
 }
 
 function isPlayer(value: unknown): value is Player {
@@ -181,29 +221,47 @@ function isWinner(value: unknown): value is Winner {
   return value === 0 || value === 1 || value === "draw";
 }
 
-function parseBoard(value: unknown): GameState | null {
+function stripKeeper(name: string, fallback = "You"): string {
+  const t = name.replace(/[\u0000-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g, "").replace(/\s+/g, " ").trim();
+  return !t || /^keeper$/i.test(t) ? fallback : t.slice(0, 24);
+}
+
+function parseBoard(value: unknown, rules: RuleSet): GameState | null {
   if (!value || typeof value !== "object") return null;
   const rec = value as Record<string, unknown>;
   if (!Array.isArray(rec.pits) || rec.pits.length !== PIT_COUNT) return null;
-  if (!rec.pits.every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) return null;
+  if (!rec.pits.every((n) => typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 48)) return null;
+  const pits = rec.pits.map((n) => Number(n));
+  const total = pits.reduce((a, b) => a + b, 0);
+  if (total > 48) return null;
   if (!isPlayer(rec.turn)) return null;
-  if (rec.rules !== "classic" && rec.rules !== "first-empty" && rec.rules !== "until-empty") return null;
+  const boardRules =
+    rec.rules === "classic" || rec.rules === "first-empty" || rec.rules === "until-empty" ? rec.rules : rules;
+  if (boardRules !== rules) return null;
   if (typeof rec.ended !== "boolean") return null;
   if (rec.winner != null && !isWinner(rec.winner)) return null;
-  return {
-    pits: rec.pits.map((n) => Math.floor(Number(n))),
+  const board: GameState = {
+    pits,
     turn: rec.turn,
     ended: rec.ended,
     winner: rec.winner == null ? null : rec.winner,
-    rules: rec.rules,
+    rules: boardRules,
   };
+  if (board.ended && (sideSum(board.pits, 0) > 0 || sideSum(board.pits, 1) > 0)) {
+    board.ended = false;
+    board.winner = null;
+  }
+  const settled = settleState(board);
+  if (settled.ended && settled.winner == null) settled.winner = "draw";
+  return settled;
 }
 
 export function parseMatchSnapshot(raw: unknown): MatchSnapshot | null {
   if (!raw || typeof raw !== "object") return null;
   const rec = raw as Record<string, unknown>;
   if (rec.v !== 1) return null;
-  if (typeof rec.savedAt !== "number") return null;
+  if (typeof rec.savedAt !== "number" || !Number.isFinite(rec.savedAt)) return null;
+  if (rec.savedAt > Date.now() + 60_000) return null;
   if (Date.now() - rec.savedAt > MATCH_MAX_AGE_MS) return null;
   if (rec.phase !== "play" && rec.phase !== "lobby") return null;
   if (rec.gate === "over") return null;
@@ -222,9 +280,18 @@ export function parseMatchSnapshot(raw: unknown): MatchSnapshot | null {
   }
   if (!isPlayer(rec.south)) return null;
   if (!Array.isArray(rec.scores) || rec.scores.length !== 2) return null;
-  const board = parseBoard(rec.board);
+  const board = parseBoard(rec.board, settings.rules);
   if (!board) return null;
-  if (rec.gate !== "play" && rec.gate !== "between" && rec.gate !== "over") return null;
+  if (rec.gate !== "play" && rec.gate !== "between") return null;
+  const room = typeof rec.room === "string" && /^[A-Z0-9]{6}$/.test(rec.room) ? rec.room : null;
+  if (settings.mode === "online" && !room) return null;
+  const score0 = Number(rec.scores[0]);
+  const score1 = Number(rec.scores[1]);
+  if (!Number.isInteger(score0) || !Number.isInteger(score1) || score0 < 0 || score1 < 0 || score0 > 20 || score1 > 20) {
+    return null;
+  }
+  const need = settings.bestOf === 1 ? 1 : settings.bestOf === 3 ? 2 : settings.bestOf === 5 ? 3 : 4;
+  if (score0 >= need || score1 >= need) return null;
   return {
     v: 1,
     savedAt: rec.savedAt,
@@ -233,27 +300,43 @@ export function parseMatchSnapshot(raw: unknown): MatchSnapshot | null {
       mode: settings.mode,
       rules: settings.rules,
       bestOf: settings.bestOf,
-      difficulty: settings.difficulty >= 1 && settings.difficulty <= 5 ? settings.difficulty : 3,
-      playerName: String(settings.playerName || "Keeper").slice(0, 24),
-      friendName: String(settings.friendName || "Friend").slice(0, 24),
+      difficulty:
+        Number.isInteger(settings.difficulty) && settings.difficulty >= 1 && settings.difficulty <= 5
+          ? settings.difficulty
+          : 3,
+      playerName: stripKeeper(String(settings.playerName || "You"), "You"),
+      friendName: stripKeeper(String(settings.friendName || "Friend"), "Friend"),
     },
-    names: [names[0].slice(0, 24), names[1].slice(0, 24)],
+    names: [
+      stripKeeper(names[0], "You"),
+      (() => {
+        const far = stripKeeper(names[1], "Friend");
+        return /^you$/i.test(far) ? "Friend" : far;
+      })(),
+    ],
     south: rec.south,
-    scores: [Number(rec.scores[0]) || 0, Number(rec.scores[1]) || 0],
-    gameIndex: typeof rec.gameIndex === "number" ? rec.gameIndex : 0,
+    scores: [score0, score1],
+    gameIndex:
+      typeof rec.gameIndex === "number" && Number.isFinite(rec.gameIndex)
+        ? Math.max(0, Math.min(20, Math.trunc(rec.gameIndex)))
+        : 0,
     gate: rec.gate,
     lastWinner: rec.lastWinner == null || !isWinner(rec.lastWinner) ? null : rec.lastWinner,
-    lastCoops: Array.isArray(rec.lastCoops) ? [Number(rec.lastCoops[0]) || 0, Number(rec.lastCoops[1]) || 0] : [0, 0],
+    lastCoops: Array.isArray(rec.lastCoops)
+      ? [Math.max(0, Math.min(48, Number(rec.lastCoops[0]) || 0)), Math.max(0, Math.min(48, Number(rec.lastCoops[1]) || 0))]
+      : [0, 0],
     board,
     host: rec.host === true,
-    room: typeof rec.room === "string" && rec.room.length >= 4 ? rec.room : null,
+    room,
+    peerId: typeof rec.peerId === "string" && PEER_RE.test(rec.peerId) ? rec.peerId : undefined,
+    seq:
+      typeof rec.seq === "number" && Number.isInteger(rec.seq) && rec.seq >= 0 && rec.seq <= 9999 ? rec.seq : 0,
   };
 }
 
 export function loadMatchSnapshot(): MatchSnapshot | null {
-  if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(MATCH_KEY);
+    const raw = readStore(MATCH_KEY);
     if (!raw) return null;
     return parseMatchSnapshot(JSON.parse(raw));
   } catch {
@@ -261,12 +344,6 @@ export function loadMatchSnapshot(): MatchSnapshot | null {
   }
 }
 
-export function saveMatchSnapshot(snap: MatchSnapshot): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(MATCH_KEY, JSON.stringify({ ...snap, v: 1, savedAt: Date.now() }));
-}
-
 export function clearMatchSnapshot(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(MATCH_KEY);
+  removeStore(MATCH_KEY);
 }

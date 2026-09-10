@@ -15,4 +15,14 @@ export function breedFor(pit: number, index: number): (typeof BREEDS)[number] {
 }
 
 export const COOP_SRC = "/chickens/coop.png";
-export const HERO_SRC = "/art/hero.jpg";
+export const HERO_SRC = "/art/hero.jpg?v=8";
+
+export function preloadArt(): void {
+  if (typeof window === "undefined") return;
+  for (const src of [...BREEDS.map((b) => b.src), COOP_SRC, "/art/pit.jpg", "/art/wood.jpg"]) {
+    const img = new Image();
+    img.src = src;
+  }
+  const hero = new Image();
+  hero.src = HERO_SRC;
+}

@@ -111,6 +111,11 @@ function pruneMem(now: number) {
     if (now - p.lastSeen > PEER_TTL_MS) store.peers.delete(k);
   }
   store.signals = store.signals.filter((s) => now - s.createdAt <= SIGNAL_TTL_MS);
+  if (store.peers.size > 200) {
+    const oldest = [...store.peers.entries()].sort((a, b) => a[1].lastSeen - b[1].lastSeen);
+    for (const [k] of oldest.slice(0, store.peers.size - 160)) store.peers.delete(k);
+  }
+  if (store.signals.length > 400) store.signals = store.signals.slice(-300);
 }
 
 function json(body: unknown, status = 200): Response {
@@ -127,6 +132,20 @@ async function handleGetSql(sql: Sql, room: string, peer: string, name: string, 
       sql.query(`DELETE FROM webrtc_signals WHERE created_at < now() - make_interval(secs => $1)`, [60]),
       sql.query(`DELETE FROM webrtc_peers WHERE last_seen < now() - make_interval(secs => $1)`, [30]),
     ]);
+  }
+  const occupancy = await sql.query<{ n: string | number }>(
+    `SELECT count(*)::int AS n FROM webrtc_peers
+     WHERE room = $1 AND peer_id <> $2 AND last_seen > now() - make_interval(secs => $3)`,
+    [room, peer, 30],
+  );
+  if (Number(occupancy[0]?.n ?? 0) >= 2) {
+    const mine = await sql.query<{ n: string | number }>(
+      `SELECT count(*)::int AS n FROM webrtc_peers WHERE room = $1 AND peer_id = $2 AND last_seen > now() - make_interval(secs => $3)`,
+      [room, peer, 30],
+    );
+    if (Number(mine[0]?.n ?? 0) === 0) {
+      return json({ error: "full", peers: [] as PeerRow[], signals: [] as SignalRow[] }, 409);
+    }
   }
   await sql.query(
     `INSERT INTO webrtc_peers (room, peer_id, name, last_seen)
@@ -168,6 +187,10 @@ function handleGetMem(room: string, peer: string, name: string, since: number) {
   const now = Date.now();
   pruneMem(now);
   const store = mem();
+  const others = [...store.peers.values()].filter((p) => p.room === room && p.peer !== peer);
+  if (others.length >= 2 && !store.peers.has(key(room, peer))) {
+    return json({ error: "full", peers: [] as PeerRow[], signals: [] as SignalRow[] }, 409);
+  }
   store.peers.set(key(room, peer), { room, peer, name, lastSeen: now });
   const peers: PeerRow[] = [...store.peers.values()]
     .filter((p) => p.room === room)
@@ -246,12 +269,28 @@ async function handlePost(request: Request): Promise<Response> {
   if (sql) {
     await ensureSchema(sql);
     if (msg.op === "signal") {
+      const live = await sql.query<{ n: string | number }>(
+        `SELECT count(*)::int AS n FROM webrtc_peers
+         WHERE room = $1 AND peer_id = $2 AND last_seen > now() - make_interval(secs => $3)`,
+        [msg.room, msg.from, 30],
+      );
+      if (Number(live[0]?.n ?? 0) === 0) return json({ error: "unknown peer" }, 403);
+      const dest = await sql.query<{ n: string | number }>(
+        `SELECT count(*)::int AS n FROM webrtc_peers
+         WHERE room = $1 AND peer_id = $2 AND last_seen > now() - make_interval(secs => $3)`,
+        [msg.room, msg.to, 30],
+      );
+      if (Number(dest[0]?.n ?? 0) === 0) return json({ error: "unknown peer" }, 403);
       await sql.query(
         `INSERT INTO webrtc_signals (room, to_peer, from_peer, kind, payload)
          VALUES ($1, $2, $3, $4, $5)`,
         [msg.room, msg.to, msg.from, msg.kind, JSON.stringify(msg.payload)],
       );
     } else {
+      await sql.query(`DELETE FROM webrtc_signals WHERE room = $1 AND (to_peer = $2 OR from_peer = $2)`, [
+        msg.room,
+        msg.peer,
+      ]);
       await sql.query(`DELETE FROM webrtc_peers WHERE room = $1 AND peer_id = $2`, [
         msg.room,
         msg.peer,
@@ -263,6 +302,8 @@ async function handlePost(request: Request): Promise<Response> {
   const store = mem();
   pruneMem(Date.now());
   if (msg.op === "signal") {
+    if (!store.peers.has(key(msg.room, msg.from))) return json({ error: "unknown peer" }, 403);
+    if (!store.peers.has(key(msg.room, msg.to))) return json({ error: "unknown peer" }, 403);
     store.signals.push({
       id: store.nextId++,
       room: msg.room,
@@ -274,6 +315,7 @@ async function handlePost(request: Request): Promise<Response> {
     });
   } else {
     store.peers.delete(key(msg.room, msg.peer));
+    store.signals = store.signals.filter((s) => s.from !== msg.peer && s.to !== msg.peer);
   }
   return json({ ok: true });
 }

@@ -21,9 +21,10 @@ export function tallyGame(
   const next: [number, number] = [scores[0], scores[1]];
   if (winner !== "draw") next[winner] += 1;
   const seriesWinner: Player | null = next[0] >= need ? 0 : next[1] >= need ? 1 : null;
+  const tiedOpener = winner === "draw" && need === 1;
   return {
     scores: next,
-    gate: seriesWinner != null ? "over" : "between",
+    gate: seriesWinner != null || tiedOpener ? "over" : "between",
     seriesWinner,
   };
 }

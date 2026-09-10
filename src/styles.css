@@ -45,7 +45,19 @@
   }
 
   body {
-    background: var(--color-bg);
+    background-color: var(--color-grass-dark);
+    background-image:
+      linear-gradient(
+        180deg,
+        color-mix(in oklab, #9aafc0 42%, #d8c7a4) 0%,
+        color-mix(in oklab, #e4d3b0 78%, #cbb68c) 34%,
+        color-mix(in oklab, var(--color-grass) 58%, #c4b07a) 54%,
+        color-mix(in oklab, var(--color-grass-dark) 78%, var(--color-wood-dark)) 100%
+      ),
+      url("/art/wood.jpg");
+    background-size: auto, 880px;
+    background-attachment: fixed, fixed;
+    background-blend-mode: normal, overlay;
     color: var(--color-fg);
     font-family: var(--font-sans);
   }
@@ -67,6 +79,138 @@
   }
 }
 
+.farm-scene {
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+.farm-hero-bg {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 32%;
+}
+
+.farm-scene-shade {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--color-wood-dark) 18%, transparent) 0%,
+      color-mix(in oklab, var(--color-bg) 12%, transparent) 42%,
+      color-mix(in oklab, var(--color-grass-dark) 42%, transparent) 78%,
+      color-mix(in oklab, var(--color-wood-dark) 55%, black) 100%
+    ),
+    url("/art/wood.jpg");
+  background-size: cover, 720px;
+  background-blend-mode: multiply;
+  opacity: 0.38;
+}
+
+.farm-scene-hero .farm-scene-shade {
+  opacity: 0.5;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-wood-dark) 22%, transparent) 0%,
+    color-mix(in oklab, var(--color-wood-dark) 6%, transparent) 38%,
+    color-mix(in oklab, var(--color-grass-dark) 38%, transparent) 72%,
+    color-mix(in oklab, var(--color-wood-dark) 58%, black) 100%
+  );
+}
+
+.farm-scene-hero .farm-scene-ground,
+.farm-scene-hero .farm-fence {
+  display: none;
+}
+
+.farm-scene-ground {
+  pointer-events: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  height: min(40dvh, 20rem);
+  background:
+    linear-gradient(180deg, transparent, color-mix(in oklab, var(--color-grass-dark) 78%, var(--color-wood-dark))),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 16px,
+      color-mix(in oklab, var(--color-grass-dark) 40%, transparent) 16px 17px
+    );
+}
+
+.farm-fence {
+  pointer-events: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 11%;
+  z-index: 0;
+  height: 3.4rem;
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--color-wood-dark) 82%, black) 0 8px,
+      transparent 8px 44px
+    ),
+    repeating-linear-gradient(
+      180deg,
+      transparent 0 9px,
+      color-mix(in oklab, var(--color-wood) 78%, var(--color-straw)) 9px 12px,
+      transparent 12px 21px
+    );
+  opacity: 0.4;
+  mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
+}
+
+.farm-inner {
+  position: relative;
+  z-index: 1;
+}
+
+.farm-card {
+  background-color: color-mix(in oklab, var(--color-surface) 90%, var(--color-straw));
+  background-image:
+    linear-gradient(180deg, color-mix(in oklab, white 30%, transparent), transparent 42%),
+    url("/art/wood.jpg");
+  background-size: auto, 640px;
+  background-blend-mode: soft-light;
+  border: 2px solid color-mix(in oklab, var(--color-wood-dark) 40%, transparent);
+  box-shadow:
+    0 16px 36px color-mix(in oklab, black 30%, transparent),
+    inset 0 1px 0 color-mix(in oklab, white 48%, transparent);
+}
+
+.farm-panel {
+  background-color: color-mix(in oklab, var(--color-surface) 84%, var(--color-straw));
+  background-image: url("/art/wood.jpg");
+  background-size: 520px;
+  background-blend-mode: soft-light;
+  border: 1px solid color-mix(in oklab, var(--color-wood-dark) 26%, transparent);
+}
+
+.farm-dock {
+  background-color: color-mix(in oklab, var(--color-surface) 88%, var(--color-straw));
+  background-image: url("/art/wood.jpg");
+  background-size: 640px;
+  background-blend-mode: soft-light;
+  border-color: color-mix(in oklab, var(--color-wood-dark) 28%, transparent);
+}
+
+
+html.play-root-lock,
+html.play-root-lock body,
 html.play-flipped,
 html.play-flipped body {
   overflow: hidden;
@@ -78,7 +222,6 @@ html.play-flipped body {
 .play-landscape {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
-  padding-bottom: env(safe-area-inset-bottom);
   height: 100dvh;
   max-height: 100dvh;
   overflow: hidden;
@@ -95,7 +238,34 @@ html.play-flipped body {
   max-height: none;
   transform: translate(-50%, -50%) rotate(90deg);
   overflow: hidden;
-  background: var(--color-bg);
+  background-color: var(--color-grass-dark);
+  background-image:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--color-straw) 22%, var(--color-grass)) 0%,
+      var(--color-grass) 42%,
+      var(--color-grass-dark) 100%
+    ),
+    url("/art/wood.jpg");
+  background-size: cover, 800px;
+  background-blend-mode: multiply;
+}
+
+.play-rotate-landscape .play-shell {
+  padding-top: max(0.4rem, env(safe-area-inset-right));
+  padding-right: max(0.55rem, env(safe-area-inset-bottom));
+  padding-bottom: max(0.45rem, env(safe-area-inset-left));
+  padding-left: max(0.55rem, env(safe-area-inset-top));
+}
+
+html.play-flipped .series-overlay {
+  width: 100dvh;
+  height: 100dvw;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%) rotate(90deg);
 }
 
 .play-shell {
@@ -107,6 +277,20 @@ html.play-flipped body {
   padding: max(0.4rem, env(safe-area-inset-top)) 0.55rem max(0.45rem, env(safe-area-inset-bottom));
 }
 
+.play-root {
+  background-color: var(--color-grass-dark);
+  background-image:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--color-straw) 24%, var(--color-grass)) 0%,
+      var(--color-grass) 40%,
+      var(--color-grass-dark) 100%
+    ),
+    url("/art/wood.jpg");
+  background-size: cover, 800px;
+  background-blend-mode: multiply;
+}
+
 .play-hud {
   display: flex;
   flex-shrink: 0;
@@ -116,11 +300,28 @@ html.play-flipped body {
 
 .play-status {
   flex-shrink: 0;
-  margin: 0.2rem 0 0.35rem;
-  min-height: 1.1rem;
+  margin: 0.08rem 0 0.18rem;
+  min-height: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.15rem 0.5rem;
   text-align: center;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--color-muted);
+}
+
+.play-status > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.play-landscape .play-status {
+  margin: 0.02rem 0 0.1rem;
+  font-size: 0.74rem;
 }
 
 .board-stage {
@@ -139,6 +340,8 @@ html.play-flipped body {
   padding: 1rem;
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
   background: color-mix(in oklab, var(--color-wood-dark) 42%, transparent);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .board-wrap {
@@ -410,7 +613,7 @@ html.play-flipped body {
   pointer-events: none;
   position: absolute;
   left: 50%;
-  top: 10%;
+  top: 8%;
   z-index: 12;
   transform: translateX(-50%);
   border-radius: 999px;
@@ -610,9 +813,14 @@ html.play-flipped body {
   .hen-pop,
   .shake,
   .fly-hen,
-  .yard-legal {
+  .yard-legal,
+  .yard-forage {
     animation: none;
     transition: none;
+  }
+
+  .animate-spin {
+    animation: none;
   }
 }
 
@@ -624,5 +832,96 @@ html.play-flipped body {
 
   .coop-kicker {
     display: none;
+  }
+}
+
+.yard-soil {
+  pointer-events: none;
+  position: absolute;
+  inset: 12%;
+  z-index: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 70%, color-mix(in oklab, var(--color-straw) 35%, transparent), transparent 70%);
+}
+
+.pit-slot {
+  pointer-events: none;
+  position: absolute;
+  top: auto;
+  bottom: 0.28rem;
+  left: 50%;
+  z-index: 6;
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  line-height: 1;
+  color: color-mix(in oklab, var(--color-primary-fg) 88%, var(--color-straw));
+  text-shadow: 0 1px 1px color-mix(in oklab, black 55%, transparent);
+}
+
+.yard-forage {
+  outline: 3px dashed color-mix(in oklab, var(--color-straw) 85%, white);
+  outline-offset: 3px;
+}
+
+.play-hud .series-pips {
+  gap: 0.12rem;
+  margin-top: 0.12rem;
+}
+
+.play-hud .pip-on,
+.play-hud .pip-off {
+  width: 0.38rem;
+  height: 0.38rem;
+}
+
+.yard-trail {
+  outline: 2px dashed color-mix(in oklab, var(--color-straw) 70%, white);
+  outline-offset: 2px;
+}
+
+.coop-pop {
+  position: absolute;
+  right: 0.35rem;
+  top: 0.2rem;
+  z-index: 6;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--color-straw);
+  text-shadow: 0 1px 2px color-mix(in oklab, black 50%, transparent);
+  animation: coop-pop 720ms var(--ease-smooth-out) both;
+  pointer-events: none;
+}
+
+@keyframes coop-pop {
+  0% {
+    transform: translateY(8px) scale(0.6);
+    opacity: 0;
+  }
+  28% {
+    transform: translateY(-2px) scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-12px) scale(1);
+    opacity: 0;
+  }
+}
+
+.series-card {
+  max-height: min(92dvh, 40rem);
+  overflow-y: auto;
+  background-color: color-mix(in oklab, var(--color-surface) 90%, var(--color-straw));
+  background-image:
+    linear-gradient(180deg, color-mix(in oklab, white 30%, transparent), transparent 42%),
+    url("/art/wood.jpg");
+  background-size: auto, 640px;
+  background-blend-mode: soft-light;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coop-pop {
+    animation: none;
+    opacity: 1;
   }
 }

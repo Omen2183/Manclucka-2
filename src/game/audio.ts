@@ -39,6 +39,7 @@ let yardSrc: AudioBufferSourceNode | null = null;
 let yardFade: GainNode | null = null;
 let yardTimer: ReturnType<typeof setTimeout> | null = null;
 let lastYardUrl = "";
+const liveYard = new Set<AudioBufferSourceNode>();
 const mixListeners = new Set<(next: MixerLevels) => void>();
 
 function emitMix(): void {
@@ -55,11 +56,36 @@ function applyGains(): void {
   yard.gain.setTargetAtTime(mix.yard, t, 0.08);
 }
 
+function dropClosedContext(): void {
+  ctx = null;
+  master = null;
+  sfx = null;
+  yard = null;
+  preloadStarted = false;
+  buffers.clear();
+  yardSrc = null;
+  yardFade = null;
+  lastYardUrl = "";
+  voices = 0;
+  unlocked = false;
+  liveYard.clear();
+}
+
 function ensure(): AudioContext | null {
   if (typeof window === "undefined") return null;
+  if (ctx?.state === "closed") dropClosedContext();
   if (!ctx) {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    ctx = new AC({ latencyHint: "interactive" });
+    if (!AC) return null;
+    try {
+      ctx = new AC({ latencyHint: "interactive" });
+    } catch {
+      try {
+        ctx = new AC();
+      } catch {
+        return null;
+      }
+    }
     master = ctx.createGain();
     sfx = ctx.createGain();
     yard = ctx.createGain();
@@ -67,12 +93,22 @@ function ensure(): AudioContext | null {
     yard.connect(master);
     master.connect(ctx.destination);
     applyGains();
+    ctx.onstatechange = () => {
+      if (!ctx) return;
+      if (ctx.state === "closed") dropClosedContext();
+      else if (ctx.state === "running") {
+        unlocked = true;
+        if (yardWanted > 0) ensureYardBed();
+      } else {
+        stopYardBed();
+      }
+    };
   }
   return ctx;
 }
 
-function allUrls(): string[] {
-  return [...new Set([...Object.values(BANKS).flat(), ...YARD_BEDS])];
+function sfxUrls(): string[] {
+  return [...new Set(Object.values(BANKS).flat())];
 }
 
 async function decodeUrl(audio: AudioContext, url: string): Promise<void> {
@@ -80,24 +116,68 @@ async function decodeUrl(audio: AudioContext, url: string): Promise<void> {
   const res = await fetch(url, { cache: "force-cache" });
   if (!res.ok) return;
   const raw = await res.arrayBuffer();
-  const buf = await audio.decodeAudioData(raw.slice(0));
-  buffers.set(url, buf);
+  try {
+    const buf = await audio.decodeAudioData(raw.slice(0));
+    if (audio !== ctx || audio.state === "closed") return;
+    buffers.set(url, buf);
+  } catch {
+    /* skip a bad clip */
+  }
 }
 
 function preload(): void {
   const audio = ensure();
   if (!audio || preloadStarted) return;
   preloadStarted = true;
-  void Promise.all(allUrls().map((url) => decodeUrl(audio, url).catch(() => undefined))).then(() => {
-    if (yardWanted > 0) ensureYardBed();
+  void Promise.all(sfxUrls().map((url) => decodeUrl(audio, url).catch(() => undefined))).then(() => {
+    if (yardWanted > 0) void warmYard(audio);
   });
+}
+
+async function warmYard(audio: AudioContext): Promise<void> {
+  for (const url of YARD_BEDS) {
+    await decodeUrl(audio, url).catch(() => undefined);
+    if (buffers.has(url) && yardWanted > 0 && !yardSrc) ensureYardBed();
+    break;
+  }
+  for (const url of YARD_BEDS) {
+    if (!buffers.has(url)) void decodeUrl(audio, url).catch(() => undefined);
+  }
 }
 
 export function unlockAudio(): void {
   const audio = ensure();
   if (!audio) return;
-  if (audio.state === "suspended") void audio.resume();
-  unlocked = true;
+  if (audio.state === "closed") {
+    dropClosedContext();
+    return;
+  }
+  if (audio.state !== "running") {
+    void audio.resume().then(() => {
+      if (audio.state === "running") {
+        unlocked = true;
+        if (yardWanted > 0) ensureYardBed();
+      }
+    }).catch(() => undefined);
+  } else {
+    unlocked = true;
+  }
+  try {
+    const tick = audio.createBuffer(1, 1, audio.sampleRate);
+    const src = audio.createBufferSource();
+    src.buffer = tick;
+    src.connect(audio.destination);
+    src.onended = () => {
+      try {
+        src.disconnect();
+      } catch {
+        /* already gone */
+      }
+    };
+    src.start(0);
+  } catch {
+    /* gesture unlock fallback */
+  }
   preload();
   if (yardWanted > 0) ensureYardBed();
 }
@@ -140,39 +220,50 @@ function pick<T>(list: readonly T[]): T {
 
 function playBuffer(url: string, opts: { rate?: number; gain?: number; when?: number } = {}): boolean {
   const audio = ensure();
-  if (!audio || !sfx || !unlocked || muted) return false;
+  if (!audio || !sfx || !unlocked || muted || audio.state !== "running") return false;
   const buf = buffers.get(url);
   if (!buf) return false;
-  if (voices >= MAX_VOICES) return true;
+  if (voices >= MAX_VOICES) return false;
 
-  const src = audio.createBufferSource();
-  src.buffer = buf;
-  src.playbackRate.value = opts.rate ?? 1;
+  try {
+    const src = audio.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = opts.rate ?? 1;
 
-  const g = audio.createGain();
-  const peak = opts.gain ?? 0.9;
-  const t = opts.when ?? audio.currentTime;
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(peak, t + 0.012);
-  g.gain.setValueAtTime(peak, t + Math.max(0.04, buf.duration - 0.08));
-  g.gain.exponentialRampToValueAtTime(0.0001, t + buf.duration + 0.02);
+    const g = audio.createGain();
+    const peak = Math.max(0.0001, opts.gain ?? 0.9);
+    const t = opts.when ?? audio.currentTime;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.012);
+    g.gain.setValueAtTime(peak, t + Math.max(0.04, buf.duration - 0.08));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + buf.duration + 0.02);
 
-  src.connect(g);
-  g.connect(sfx);
-  voices += 1;
-  src.onended = () => {
+    src.connect(g);
+    g.connect(sfx);
+    voices += 1;
+    src.onended = () => {
+      voices = Math.max(0, voices - 1);
+      try {
+        src.disconnect();
+        g.disconnect();
+      } catch {
+        /* already gone */
+      }
+    };
+    src.start(t);
+    return true;
+  } catch {
     voices = Math.max(0, voices - 1);
-    src.disconnect();
-    g.disconnect();
-  };
-  src.start(t);
-  return true;
+    return false;
+  }
 }
 
 function playCue(cue: Cue, jitter = 0.08, gain = 0.9): void {
+  if (muted) return;
   const url = pick(BANKS[cue]);
   const rate = 1 + (Math.random() * 2 - 1) * jitter;
   if (playBuffer(url, { rate, gain })) return;
+  if (voices >= MAX_VOICES) return;
   synthFallback(cue);
 }
 
@@ -195,14 +286,19 @@ function playTone(
   peak: number,
   slideTo?: number,
 ) {
-  const osc = audio.createOscillator();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, start);
-  if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, start + dur);
-  const g = envGain(audio, dest, start, peak, Math.min(0.012, dur / 4), dur);
-  osc.connect(g);
-  osc.start(start);
-  osc.stop(start + dur + 0.02);
+  if (audio.state !== "running") return;
+  try {
+    const osc = audio.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, start);
+    if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, start + dur);
+    const g = envGain(audio, dest, start, Math.max(0.0001, peak), Math.min(0.012, dur / 4), dur);
+    osc.connect(g);
+    osc.start(start);
+    osc.stop(start + dur + 0.02);
+  } catch {
+    /* closed / interrupted context */
+  }
 }
 
 function synthFallback(cue: Cue): void {
@@ -235,13 +331,19 @@ function stopYardBed(): void {
     yardTimer = null;
   }
   const audio = ctx;
+  for (const src of liveYard) {
+    try {
+      src.stop();
+    } catch {
+      /* already stopped */
+    }
+  }
+  liveYard.clear();
   if (yardSrc && yardFade && audio) {
     try {
       yardFade.gain.cancelScheduledValues(audio.currentTime);
-      yardFade.gain.setTargetAtTime(0.0001, audio.currentTime, 0.12);
-      yardSrc.stop(audio.currentTime + 0.4);
     } catch {
-      /* already stopped */
+      /* ignore */
     }
   }
   yardSrc = null;
@@ -259,57 +361,77 @@ function scheduleYardRotate(): void {
 function playYardBed(): void {
   const audio = ensure();
   if (!audio || !yard || !unlocked || muted || mix.yard <= 0.01) return;
+  if (audio.state !== "running") return;
   const ready = YARD_BEDS.filter((url) => buffers.has(url) && url !== lastYardUrl);
   const pool = ready.length ? ready : YARD_BEDS.filter((url) => buffers.has(url));
-  if (!pool.length) return;
+  if (!pool.length) {
+    void warmYard(audio);
+    return;
+  }
   const url = pick(pool);
   const buf = buffers.get(url);
-  if (!buf) return;
+  if (!buf || buf.duration < 1.5) return;
 
-  const src = audio.createBufferSource();
-  src.buffer = buf;
-  src.loop = true;
-  src.loopStart = Math.min(1.15, buf.duration * 0.06);
-  src.loopEnd = Math.max(src.loopStart + 4, buf.duration - 1.35);
-
-  const g = audio.createGain();
-  g.gain.value = 0.0001;
-  src.connect(g);
-  g.connect(yard);
-  src.start();
-  g.gain.exponentialRampToValueAtTime(1, audio.currentTime + 1.6);
-
-  if (yardSrc && yardFade) {
-    const oldSrc = yardSrc;
-    const oldG = yardFade;
-    oldG.gain.cancelScheduledValues(audio.currentTime);
-    oldG.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 2);
-    try {
-      oldSrc.stop(audio.currentTime + 2.15);
-    } catch {
-      /* ignore */
+  try {
+    const src = audio.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const loopStart = Math.min(0.9, buf.duration * 0.04);
+    const loopEnd = Math.min(buf.duration - 0.05, Math.max(loopStart + 2, buf.duration - 1.2));
+    if (loopEnd > loopStart + 1) {
+      src.loopStart = loopStart;
+      src.loopEnd = loopEnd;
     }
-  }
 
-  lastYardUrl = url;
-  yardSrc = src;
-  yardFade = g;
-  src.onended = () => {
-    if (yardSrc === src) yardSrc = null;
-  };
-  scheduleYardRotate();
+    const g = audio.createGain();
+    g.gain.value = 0.0001;
+    src.connect(g);
+    g.connect(yard);
+    src.start();
+    liveYard.add(src);
+    g.gain.exponentialRampToValueAtTime(1, audio.currentTime + 1.6);
+
+    if (yardSrc && yardFade) {
+      const oldSrc = yardSrc;
+      const oldG = yardFade;
+      try {
+        oldG.gain.cancelScheduledValues(audio.currentTime);
+        oldG.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 2);
+        oldSrc.stop(audio.currentTime + 2.15);
+      } catch {
+        try {
+          oldSrc.stop();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    lastYardUrl = url;
+    yardSrc = src;
+    yardFade = g;
+    src.onended = () => {
+      liveYard.delete(src);
+      if (yardSrc === src) yardSrc = null;
+    };
+    scheduleYardRotate();
+  } catch {
+    yardSrc = null;
+    yardFade = null;
+    /* Safari can reject bad loop points / already-stopped nodes */
+  }
 }
 
 function ensureYardBed(): void {
   if (!unlocked || muted || mix.yard <= 0.01 || yardWanted <= 0) return;
+  if (ctx?.state !== "running") return;
   if (yardSrc) return;
   playYardBed();
 }
 
 export function startYard(): void {
-  yardWanted += 1;
-  unlockAudio();
-  ensureYardBed();
+  if (yardWanted < 1) yardWanted = 1;
+  if (unlocked) ensureYardBed();
 }
 
 export function stopYard(): void {
@@ -342,6 +464,7 @@ export function playLose(): void {
 }
 
 export function playIllegal(): void {
+  if (muted) return;
   const audio = ensure();
   if (!audio || !sfx || !unlocked) return;
   playTone(audio, sfx, "sine", 140, audio.currentTime, 0.1, 0.1);
@@ -349,6 +472,7 @@ export function playIllegal(): void {
 
 export function rumble(ms = 18): void {
   if (typeof navigator === "undefined" || muted) return;
+  if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   try {
     navigator.vibrate?.(ms);
   } catch {
@@ -357,14 +481,27 @@ export function rumble(ms = 18): void {
 }
 
 if (typeof window !== "undefined") {
-  window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
-  window.addEventListener("keydown", () => unlockAudio(), { once: true });
+  const unlock = () => unlockAudio();
+  window.addEventListener("pointerdown", unlock);
+  window.addEventListener("touchstart", unlock, { passive: true });
+  window.addEventListener("click", unlock);
+  window.addEventListener("keydown", unlock);
+  const onHide = () => {
+    stopYardBed();
+    voices = 0;
+    if (ctx && ctx.state === "running") void ctx.suspend().catch(() => undefined);
+  };
+  const onShow = () => {
+    if (ctx?.state === "closed") dropClosedContext();
+    voices = 0;
+    unlockAudio();
+    if (yardWanted > 0) ensureYardBed();
+  };
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-      unlockAudio();
-      if (yardWanted > 0) ensureYardBed();
-    } else {
-      stopYardBed();
-    }
+    if (document.visibilityState === "visible") onShow();
+    else onHide();
   });
+  window.addEventListener("pagehide", onHide);
+  window.addEventListener("pageshow", onShow);
+  window.addEventListener("freeze", onHide);
 }

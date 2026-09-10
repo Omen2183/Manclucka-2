@@ -20,7 +20,8 @@ export function usePlayOrientation() {
     window.addEventListener("resize", read);
     window.addEventListener("orientationchange", read);
     const mq = window.matchMedia("(orientation: landscape)");
-    mq.addEventListener("change", read);
+    if (typeof mq.addEventListener === "function") mq.addEventListener("change", read);
+    else (mq as unknown as { addListener: (fn: () => void) => void }).addListener(read);
     try {
       (screen as Screen & { orientation?: ScreenOrientationLike }).orientation?.unlock?.();
     } catch {
@@ -29,7 +30,13 @@ export function usePlayOrientation() {
     return () => {
       window.removeEventListener("resize", read);
       window.removeEventListener("orientationchange", read);
-      mq.removeEventListener("change", read);
+      if (typeof mq.removeEventListener === "function") mq.removeEventListener("change", read);
+      else (mq as unknown as { removeListener: (fn: () => void) => void }).removeListener(read);
+      try {
+        (screen as Screen & { orientation?: ScreenOrientationLike }).orientation?.unlock?.();
+      } catch {
+        /* ignore */
+      }
     };
   }, []);
 
@@ -50,6 +57,10 @@ export function usePlayOrientation() {
 
   const landscape = nativeLandscape || flipped;
   const cssRotate = flipped && !nativeLandscape;
+
+  useEffect(() => {
+    if (nativeLandscape && flipped) setFlipped(false);
+  }, [nativeLandscape, flipped]);
 
   return { nativeLandscape, landscape, cssRotate, flipped, toggleFlip };
 }
