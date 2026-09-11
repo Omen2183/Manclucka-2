@@ -12,14 +12,11 @@ Chicken cues
 - scared.mp3, scared-b.mp3 — "Hen announcing shes lain an egg.ogg" by alys (PDSounds), public domain
   https://commons.wikimedia.org/wiki/File:Hen_announcing_shes_lain_an_egg.ogg
 
-Yard ambience (looping countryside beds)
-- yard-breeze.mp3 — "Gentle breeze and birds singing.ogg" by ezwa (PDSounds #129), public domain
-  https://commons.wikimedia.org/wiki/File:Gentle_breeze_and_birds_singing.ogg
-- yard-geese.mp3 — "Breeze birds and geese.ogg" by ezwa (PDSounds #302), public domain
-  https://commons.wikimedia.org/wiki/File:Breeze_birds_and_geese.ogg
+Yard ambience (cleaned countryside beds — high-passed, de-clicked, not looped)
 - yard-garden.mp3 — "Birds singing in garden.ogg" (PDSounds), public domain
   https://commons.wikimedia.org/wiki/File:Birds_singing_in_garden.ogg
 - yard-noon.mp3 — "Birdsong mild sunny day.ogg" (PDSounds), public domain
   https://commons.wikimedia.org/wiki/File:Birdsong_mild_sunny_day.ogg
+- yard-breeze.mp3 kept on disk but unused (source was almost all mic rumble)
 
-Trimmed, mono, loudness-normalized for the game. No rights reserved on the source recordings.
+Trimmed, mono. Rumble and open-mic hiss cut. No rights reserved on the source recordings.

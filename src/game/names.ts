@@ -26,8 +26,13 @@ export const OPPONENT_NAMES = [
   "Poppy",
 ] as const;
 
-export function pickOpponentName(exclude?: string): string {
-  const pool = OPPONENT_NAMES.filter((n) => n.toLowerCase() !== exclude?.trim().toLowerCase());
+export function pickOpponentName(...exclude: Array<string | undefined | null>): string {
+  const skip = new Set(
+    exclude
+      .map((n) => String(n ?? "").trim().toLowerCase())
+      .filter((n) => n.length > 0),
+  );
+  const pool = OPPONENT_NAMES.filter((n) => !skip.has(n.toLowerCase()));
   const list = pool.length > 0 ? pool : [...OPPONENT_NAMES];
   return list[Math.floor(Math.random() * list.length)]!;
 }

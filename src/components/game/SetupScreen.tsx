@@ -1,11 +1,11 @@
-import { ArrowLeft, Loader2, Swords, User, Users, Wifi } from "lucide-react";
+import { ArrowLeft, Loader2, Shuffle, Swords, User, Users, Wifi } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { FarmScene } from "@/components/game/FarmScene";
 import { MixerButton } from "@/components/game/MixerButton";
-import { DIFFICULTY_BLURBS, DIFFICULTY_LABELS, OPPONENT_NAMES, RULE_BLURBS, RULE_LABELS } from "@/game/names";
+import { DIFFICULTY_BLURBS, DIFFICULTY_LABELS, pickOpponentName, RULE_BLURBS, RULE_LABELS } from "@/game/names";
 import type { BestOf, MatchSettings, PlayMode, RuleSet } from "@/game/types";
 import { cn, NAME_MAX } from "@/lib/utils";
 
@@ -71,7 +71,7 @@ export function SetupScreen({
 
             <div>
               <p className="text-sm font-medium text-muted">Play</p>
-              <div className="mt-2 grid gap-2">
+              <div className="mt-2 grid gap-1.5">
                 {MODES.map((mode) => {
                   const Icon = mode.icon;
                   const active = settings.mode === mode.id;
@@ -81,7 +81,7 @@ export function SetupScreen({
                       type="button"
                       onClick={() => onChange({ mode: mode.id })}
                       className={cn(
-                        "flex items-start gap-3 rounded-xl border px-3 py-3 text-left transition-colors",
+                        "flex items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
                         active ? "border-primary farm-panel" : "border-border bg-surface/70 hover:bg-surface",
                       )}
                     >
@@ -111,6 +111,69 @@ export function SetupScreen({
                   onChange={(e) => onChange({ friendName: e.target.value.slice(0, NAME_MAX) })}
                 />
                 <p className="mt-1 text-xs text-muted">This name sits on the far coop.</p>
+              </div>
+            )}
+
+            {settings.mode === "solo" && (
+              <div>
+                <Label htmlFor="rival-name">Rival hen</Label>
+                <Input
+                  id="rival-name"
+                  className="mt-1.5"
+                  maxLength={NAME_MAX}
+                  autoComplete="off"
+                  autoCapitalize="words"
+                  spellCheck={false}
+                  placeholder="optional — or shuffle a hen"
+                  value={settings.friendName}
+                  onChange={(e) => onChange({ friendName: e.target.value.slice(0, NAME_MAX) })}
+                />
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() =>
+                      onChange({
+                        friendName: pickOpponentName(settings.friendName, settings.playerName),
+                      })
+                    }
+                  >
+                    <Shuffle />
+                    Shuffle
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className={cn(!settings.friendName && "border-primary ring-2 ring-primary/40")}
+                    aria-pressed={!settings.friendName}
+                    onClick={() => onChange({ friendName: "" })}
+                  >
+                    Surprise me
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {settings.mode === "solo" && (
+              <div>
+                <div className="flex items-baseline justify-between">
+                  <Label htmlFor="difficulty">Difficulty</Label>
+                  <span className="text-sm text-muted">{DIFFICULTY_LABELS[settings.difficulty]}</span>
+                </div>
+                <Slider
+                  id="difficulty"
+                  className="mt-3"
+                  min={1}
+                  max={5}
+                  step={1}
+                  value={[settings.difficulty]}
+                  onValueChange={([v]) => onChange({ difficulty: (v ?? 3) as MatchSettings["difficulty"] })}
+                />
+                <div className="mt-1 flex justify-between text-xs text-subtle">
+                  <span>Hatchling</span>
+                  <span>Flock Boss</span>
+                </div>
+                <p className="mt-2 text-sm text-muted">{DIFFICULTY_BLURBS[settings.difficulty]}</p>
               </div>
             )}
 
@@ -155,66 +218,6 @@ export function SetupScreen({
                 ))}
               </div>
             </div>
-
-            {settings.mode === "solo" && (
-              <div>
-                <p className="text-sm font-medium text-muted">Rival hen</p>
-                <p className="mt-1 text-xs text-muted">Empty means a surprise from the flock.</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onChange({ friendName: "" })}
-                    className={cn(
-                      "h-11 rounded-full border px-3 text-sm",
-                      !settings.friendName
-                        ? "border-primary farm-panel"
-                        : "border-border bg-surface/70 hover:bg-surface",
-                    )}
-                  >
-                    Surprise me
-                  </button>
-                  {OPPONENT_NAMES.map((hen) => {
-                    const active = settings.friendName === hen;
-                    return (
-                      <button
-                        key={hen}
-                        type="button"
-                        onClick={() => onChange({ friendName: hen })}
-                        className={cn(
-                          "h-11 rounded-full border px-3 text-sm",
-                          active ? "border-primary farm-panel" : "border-border bg-surface/70 hover:bg-surface",
-                        )}
-                      >
-                        {hen}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {settings.mode === "solo" && (
-              <div>
-                <div className="flex items-baseline justify-between">
-                  <Label htmlFor="difficulty">Difficulty</Label>
-                  <span className="text-sm text-muted">{DIFFICULTY_LABELS[settings.difficulty]}</span>
-                </div>
-                <Slider
-                  id="difficulty"
-                  className="mt-3"
-                  min={1}
-                  max={5}
-                  step={1}
-                  value={[settings.difficulty]}
-                  onValueChange={([v]) => onChange({ difficulty: (v ?? 3) as MatchSettings["difficulty"] })}
-                />
-                <div className="mt-1 flex justify-between text-xs text-subtle">
-                  <span>Hatchling</span>
-                  <span>Flock Boss</span>
-                </div>
-                <p className="mt-2 text-sm text-muted">{DIFFICULTY_BLURBS[settings.difficulty]}</p>
-              </div>
-            )}
 
             {settings.mode === "online" && (
               <div className="farm-panel rounded-xl p-4">

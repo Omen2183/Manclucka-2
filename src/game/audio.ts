@@ -1,13 +1,11 @@
 /**
- * Farm mixer: real chicken recordings + looping countryside beds,
+ * Farm mixer: chicken cues plus countryside beds (high-passed, not looped),
  * with a tiny synth fallback if a clip fails to load (offline / first tap).
  */
 
-import { loadMixer, saveMixer, type MixerLevels } from "@/lib/persist";
+import { DEFAULT_MIXER, loadMixer, saveMixer, type MixerLevels } from "@/lib/persist";
 
 const MAX_VOICES = 8;
-const YARD_ROTATE_MIN_MS = 26000;
-const YARD_ROTATE_SPAN_MS = 22000;
 
 const BANKS = {
   sow: ["/sfx/cluck-a.mp3", "/sfx/cluck-b.mp3", "/sfx/cluck-c.mp3", "/sfx/cluck-d.mp3", "/sfx/cluck-e.mp3"],
@@ -18,7 +16,7 @@ const BANKS = {
   lose: ["/sfx/scared-b.mp3"],
 } as const;
 
-const YARD_BEDS = ["/sfx/yard-breeze.mp3", "/sfx/yard-geese.mp3", "/sfx/yard-garden.mp3", "/sfx/yard-noon.mp3"];
+const YARD_BEDS = ["/sfx/yard-garden.mp3?v=3", "/sfx/yard-noon.mp3?v=3"];
 
 type Cue = keyof typeof BANKS;
 
@@ -26,12 +24,13 @@ let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let sfx: GainNode | null = null;
 let yard: GainNode | null = null;
+let yardHp: BiquadFilterNode | null = null;
 let unlocked = false;
 let voices = 0;
 let preloadStarted = false;
 const buffers = new Map<string, AudioBuffer>();
 
-let mix: MixerLevels = typeof window !== "undefined" ? loadMixer() : { master: 0.72, chickens: 1, yard: 0.42, muted: false };
+let mix: MixerLevels = typeof window !== "undefined" ? loadMixer() : { ...DEFAULT_MIXER };
 let muted = mix.muted;
 
 let yardWanted = 0;
@@ -61,6 +60,7 @@ function dropClosedContext(): void {
   master = null;
   sfx = null;
   yard = null;
+  yardHp = null;
   preloadStarted = false;
   buffers.clear();
   yardSrc = null;
@@ -89,8 +89,13 @@ function ensure(): AudioContext | null {
     master = ctx.createGain();
     sfx = ctx.createGain();
     yard = ctx.createGain();
+    yardHp = ctx.createBiquadFilter();
+    yardHp.type = "highpass";
+    yardHp.frequency.value = 180;
+    yardHp.Q.value = 0.7;
     sfx.connect(master);
-    yard.connect(master);
+    yard.connect(yardHp);
+    yardHp.connect(master);
     master.connect(ctx.destination);
     applyGains();
     ctx.onstatechange = () => {
@@ -330,7 +335,8 @@ function stopYardBed(): void {
     clearTimeout(yardTimer);
     yardTimer = null;
   }
-  const audio = ctx;
+  yardSrc = null;
+  yardFade = null;
   for (const src of liveYard) {
     try {
       src.stop();
@@ -339,23 +345,14 @@ function stopYardBed(): void {
     }
   }
   liveYard.clear();
-  if (yardSrc && yardFade && audio) {
-    try {
-      yardFade.gain.cancelScheduledValues(audio.currentTime);
-    } catch {
-      /* ignore */
-    }
-  }
-  yardSrc = null;
-  yardFade = null;
 }
 
-function scheduleYardRotate(): void {
+function scheduleYardRotate(afterSec: number): void {
   if (yardTimer) clearTimeout(yardTimer);
   yardTimer = setTimeout(() => {
     yardTimer = null;
     if (yardWanted > 0 && !muted && mix.yard > 0.01) playYardBed();
-  }, YARD_ROTATE_MIN_MS + Math.random() * YARD_ROTATE_SPAN_MS);
+  }, Math.max(5000, afterSec * 1000));
 }
 
 function playYardBed(): void {
@@ -375,29 +372,25 @@ function playYardBed(): void {
   try {
     const src = audio.createBufferSource();
     src.buffer = buf;
-    src.loop = true;
-    const loopStart = Math.min(0.9, buf.duration * 0.04);
-    const loopEnd = Math.min(buf.duration - 0.05, Math.max(loopStart + 2, buf.duration - 1.2));
-    if (loopEnd > loopStart + 1) {
-      src.loopStart = loopStart;
-      src.loopEnd = loopEnd;
-    }
+    src.loop = false;
 
     const g = audio.createGain();
-    g.gain.value = 0.0001;
+    const t = audio.currentTime;
+    const peak = 0.7;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 1.4);
     src.connect(g);
     g.connect(yard);
     src.start();
     liveYard.add(src);
-    g.gain.exponentialRampToValueAtTime(1, audio.currentTime + 1.6);
 
     if (yardSrc && yardFade) {
       const oldSrc = yardSrc;
       const oldG = yardFade;
       try {
-        oldG.gain.cancelScheduledValues(audio.currentTime);
-        oldG.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 2);
-        oldSrc.stop(audio.currentTime + 2.15);
+        oldG.gain.cancelScheduledValues(t);
+        oldG.gain.exponentialRampToValueAtTime(0.0001, t + 2);
+        oldSrc.stop(t + 2.15);
       } catch {
         try {
           oldSrc.stop();
@@ -412,13 +405,16 @@ function playYardBed(): void {
     yardFade = g;
     src.onended = () => {
       liveYard.delete(src);
-      if (yardSrc === src) yardSrc = null;
+      if (yardSrc === src) {
+        yardSrc = null;
+        if (yardWanted > 0 && !muted && mix.yard > 0.01) playYardBed();
+      }
     };
-    scheduleYardRotate();
+    const overlap = Math.min(2.4, Math.max(1.2, buf.duration * 0.08));
+    scheduleYardRotate(buf.duration - overlap);
   } catch {
     yardSrc = null;
     yardFade = null;
-    /* Safari can reject bad loop points / already-stopped nodes */
   }
 }
 

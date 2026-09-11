@@ -93,7 +93,7 @@ export interface MixerLevels {
 export const DEFAULT_MIXER: MixerLevels = {
   master: 0.72,
   chickens: 1,
-  yard: 0.42,
+  yard: 0.34,
   muted: false,
 };
 
