@@ -2,7 +2,18 @@ export type Player = 0 | 1;
 export type RuleSet = "classic" | "first-empty" | "until-empty";
 export type PlayMode = "solo" | "hotseat" | "online";
 export type BestOf = 1 | 3 | 5 | 7;
-export type Difficulty = 1 | 2 | 3 | 4 | 5;
+export type Difficulty = 1 | 1.5 | 2 | 2.5 | 3 | 3.5 | 4 | 4.5 | 5;
+
+export const DIFFICULTY_STEPS = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] as const;
+
+export function clampDifficulty(n: unknown): Difficulty {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 3;
+  const stepped = Math.round(x * 2) / 2;
+  if (stepped <= 1) return 1;
+  if (stepped >= 5) return 5;
+  return stepped as Difficulty;
+}
 export type Winner = Player | "draw";
 
 export const PIT_COUNT = 14;

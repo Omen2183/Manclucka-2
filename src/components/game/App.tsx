@@ -33,7 +33,7 @@ const DEFAULTS: MatchSettings = {
   mode: "solo",
   rules: "classic",
   bestOf: 3,
-  difficulty: 3,
+  difficulty: 2,
   playerName: "",
   friendName: "",
 };
@@ -257,6 +257,10 @@ export function MancluckaApp() {
           saveName(settings.playerName);
           setResumeSnap(null);
           clearMatchSnapshot();
+          if (settings.mode === "solo" && !trimName(settings.friendName, "")) {
+            const hen = pickOpponentName(settings.playerName);
+            patchSettings({ friendName: hen });
+          }
           if (settings.mode === "online") {
             setHost(true);
             setRoom(makeRoomCode());
@@ -316,14 +320,21 @@ function LocalMatch({
   onBack: () => void;
   onPark: () => void;
 }) {
+  const lockedHen = useMemo(() => {
+    const hen = trimName(settings.friendName, "");
+    return hen || pickOpponentName(settings.playerName);
+    // Lock for this match mount — surprise-me must not rename mid-series.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const names = useMemo<[string, string]>(() => {
     if (resume) return [resume.names[0], otherKeep(resume.names[1], "Friend")];
     if (settings.mode === "hotseat") {
       return [trimName(settings.playerName, "You"), otherKeep(settings.friendName, "Friend")];
     }
     const hen = trimName(settings.friendName, "");
-    return [trimName(settings.playerName, "You"), hen || pickOpponentName(settings.playerName)];
-  }, [settings.mode, settings.playerName, settings.friendName, resume]);
+    return [trimName(settings.playerName, "You"), hen || lockedHen];
+  }, [settings.mode, settings.playerName, settings.friendName, resume, lockedHen]);
 
   const humanPlayers = useMemo(() => {
     if (settings.mode === "hotseat") return new Set<Player>([0, 1]);
@@ -562,6 +573,15 @@ function SeriesMatch({
         : lastWinner != null
           ? displayTakes(names[lastWinner], "the game")
           : "";
+  const coopSpread = Math.abs(lastCoops[0] - lastCoops[1]);
+  const seriesFlavor =
+    lastWinner === "draw"
+      ? "Split down the middle."
+      : coopSpread >= 20
+        ? "Swept the yard."
+        : coopSpread <= 4
+          ? "Close as hens on a roost."
+          : "The flock settled.";
 
   return (
     <div className="relative">
@@ -602,8 +622,8 @@ function SeriesMatch({
               {seriesTitle}
             </p>
             <p className="mt-1 text-sm text-muted">
-              Coops {lastCoops[0]} – {lastCoops[1]}
-              {nextOpener ? ` · ${nextOpener} opens the next game` : null}
+              {names[0]} {lastCoops[0]} – {names[1]} {lastCoops[1]}
+              {nextOpener ? ` · ${nextOpener} opens next` : ` · ${seriesFlavor}`}
             </p>
             <div className="mt-3 flex items-center justify-center gap-3">
               {([0, 1] as const).map((p) => (

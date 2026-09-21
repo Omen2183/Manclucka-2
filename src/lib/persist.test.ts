@@ -101,3 +101,25 @@ test("rejects a series that already has a winner", () => {
     null,
   );
 });
+
+test("keeps a half-step difficulty on a parked match", () => {
+  const board = initialState("classic");
+  const snap = parseMatchSnapshot({
+    v: 1,
+    savedAt: Date.now(),
+    phase: "play",
+    gate: "play",
+    settings: { mode: "solo", rules: "classic", bestOf: 3, difficulty: 2.5, playerName: "A", friendName: "B" },
+    names: ["A", "B"],
+    south: 0,
+    scores: [0, 0],
+    gameIndex: 0,
+    lastWinner: null,
+    lastCoops: [0, 0],
+    board,
+    host: true,
+    room: null,
+  });
+  assert.ok(snap);
+  assert.equal(snap?.settings.difficulty, 2.5);
+});

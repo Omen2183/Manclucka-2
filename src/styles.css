@@ -201,7 +201,9 @@
 }
 
 .farm-dock {
-  background-color: color-mix(in oklab, var(--color-surface) 88%, var(--color-straw));
+  position: relative;
+  z-index: 5;
+  background-color: color-mix(in oklab, var(--color-surface) 92%, var(--color-straw));
   background-image: url("/art/wood.jpg");
   background-size: 640px;
   background-blend-mode: soft-light;
@@ -213,9 +215,13 @@ html.play-root-lock,
 html.play-root-lock body,
 html.play-flipped,
 html.play-flipped body {
+  position: fixed;
+  inset: 0;
   overflow: hidden;
+  width: 100%;
   height: 100%;
   overscroll-behavior: none;
+  touch-action: manipulation;
 }
 
 .play-portrait,
@@ -299,9 +305,10 @@ html.play-flipped .series-overlay {
 }
 
 .play-status {
+  position: relative;
   flex-shrink: 0;
   margin: 0.08rem 0 0.18rem;
-  min-height: 1rem;
+  min-height: 2.35rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -314,9 +321,18 @@ html.play-flipped .series-overlay {
 
 .play-status > span {
   min-width: 0;
+  max-width: 100%;
+  padding-inline: 3.6rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.play-skip {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .play-landscape .play-status {
@@ -328,6 +344,7 @@ html.play-flipped .series-overlay {
   display: flex;
   min-height: 0;
   flex: 1;
+  overflow: hidden;
 }
 
 .play-end {
@@ -487,7 +504,7 @@ html.play-flipped .series-overlay {
   width: 100%;
   height: 100%;
   min-height: 2.75rem;
-  overflow: visible;
+  overflow: hidden;
   border-radius: 50%;
   border: 4px solid color-mix(in oklab, var(--color-wood) 82%, black);
   background:
@@ -773,16 +790,16 @@ html.play-flipped .series-overlay {
 
 .fly-hen {
   position: fixed;
+  left: 0;
+  top: 0;
   z-index: 40;
   pointer-events: none;
   width: 2.4rem;
   height: 2.4rem;
   object-fit: contain;
+  will-change: transform;
   filter: drop-shadow(0 3px 4px color-mix(in oklab, black 40%, transparent));
-  transition:
-    left 130ms var(--ease-smooth-out),
-    top 130ms var(--ease-smooth-out),
-    transform 130ms var(--ease-smooth-out);
+  transition: transform 130ms var(--ease-smooth-out);
 }
 
 .series-pips {
@@ -814,7 +831,10 @@ html.play-flipped .series-overlay {
   .shake,
   .fly-hen,
   .yard-legal,
-  .yard-forage {
+  .yard-forage,
+  .coop-pop,
+  .coop-chaff,
+  .coop-chaff i {
     animation: none;
     transition: none;
   }
@@ -844,6 +864,14 @@ html.play-flipped .series-overlay {
   background: radial-gradient(circle at 50% 70%, color-mix(in oklab, var(--color-straw) 35%, transparent), transparent 70%);
 }
 
+.yard-bare {
+  filter: saturate(0.62) brightness(0.9);
+}
+
+.yard-bare .yard-soil {
+  background: radial-gradient(circle at 50% 70%, color-mix(in oklab, var(--color-wood-dark) 35%, transparent), transparent 70%);
+}
+
 .pit-slot {
   pointer-events: none;
   position: absolute;
@@ -853,10 +881,15 @@ html.play-flipped .series-overlay {
   z-index: 6;
   transform: translateX(-50%);
   font-family: var(--font-display);
-  font-size: 0.62rem;
+  font-size: 0.74rem;
+  font-weight: 600;
   line-height: 1;
-  color: color-mix(in oklab, var(--color-primary-fg) 88%, var(--color-straw));
+  color: color-mix(in oklab, var(--color-primary-fg) 92%, var(--color-straw));
   text-shadow: 0 1px 1px color-mix(in oklab, black 55%, transparent);
+}
+
+.play-portrait .pit-slot {
+  font-size: 0.8rem;
 }
 
 .yard-forage {
@@ -905,6 +938,46 @@ html.play-flipped .series-overlay {
   100% {
     transform: translateY(-12px) scale(1);
     opacity: 0;
+  }
+}
+
+.coop-chaff {
+  pointer-events: none;
+  position: absolute;
+  inset: 8% 12% 30%;
+  z-index: 5;
+  overflow: hidden;
+}
+
+.coop-chaff i {
+  position: absolute;
+  left: 50%;
+  top: 55%;
+  width: 5px;
+  height: 2px;
+  border-radius: 1px;
+  background: color-mix(in oklab, var(--color-straw) 80%, white);
+  opacity: 0;
+  animation: coop-chaff 720ms var(--ease-smooth-out) both;
+}
+
+.coop-chaff i:nth-child(1) { --dx: -18px; --dy: -22px; --rot: -28deg; animation-delay: 0ms; }
+.coop-chaff i:nth-child(2) { --dx: 16px; --dy: -26px; --rot: 22deg; animation-delay: 40ms; }
+.coop-chaff i:nth-child(3) { --dx: -8px; --dy: -32px; --rot: 8deg; animation-delay: 70ms; }
+.coop-chaff i:nth-child(4) { --dx: 22px; --dy: -14px; --rot: 36deg; animation-delay: 30ms; }
+.coop-chaff i:nth-child(5) { --dx: -24px; --dy: -12px; --rot: -40deg; animation-delay: 90ms; }
+
+@keyframes coop-chaff {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  24% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--rot)) scale(1);
   }
 }
 

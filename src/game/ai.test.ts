@@ -5,7 +5,7 @@ import { initialState, isLegal, legalPits, tryMove } from "./engine.ts";
 import type { GameState } from "./types.ts";
 
 test("AI always returns a legal pit", () => {
-  for (const difficulty of [1, 2, 3, 4, 5] as const) {
+  for (const difficulty of [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] as const) {
     let state = initialState("classic");
     for (let i = 0; i < 12 && !state.ended; i++) {
       const pit = chooseAiMove(state, difficulty);

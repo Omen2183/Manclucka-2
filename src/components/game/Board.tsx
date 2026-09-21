@@ -7,26 +7,20 @@ import { cn } from "@/lib/utils";
 
 const MAX_VISIBLE = 8;
 
+/** Fixed roosts so adding a hen doesn't shove the ones already in the yard. */
+const ROOSTS = [
+  { x: 50, y: 56, z: 0, s: 1 },
+  { x: 36, y: 52, z: 1, s: 0.96 },
+  { x: 64, y: 58, z: 1, s: 0.96 },
+  { x: 50, y: 40, z: 2, s: 0.88 },
+  { x: 32, y: 64, z: 2, s: 0.88 },
+  { x: 68, y: 66, z: 3, s: 0.88 },
+  { x: 42, y: 72, z: 3, s: 0.76 },
+  { x: 58, y: 44, z: 4, s: 0.76 },
+] as const;
+
 function tokenLayout(count: number) {
-  const n = Math.min(count, MAX_VISIBLE);
-  if (n <= 0) return [];
-  if (n === 1) return [{ x: 50, y: 56, z: 0, s: 1 }];
-  if (n === 2) {
-    return [
-      { x: 36, y: 52, z: 0, s: 0.96 },
-      { x: 64, y: 58, z: 1, s: 0.96 },
-    ];
-  }
-  return Array.from({ length: n }, (_, i) => {
-    const angle = (i / n) * Math.PI * 2 - Math.PI / 2.2;
-    const r = n <= 4 ? 14 : n <= 6 ? 16 : 18;
-    return {
-      x: 50 + Math.cos(angle) * r,
-      y: 56 + Math.sin(angle) * (r * 0.68),
-      z: i,
-      s: n > 6 ? 0.72 : 0.82,
-    };
-  });
+  return ROOSTS.slice(0, Math.min(Math.max(count, 0), MAX_VISIBLE));
 }
 
 function ChickenTokens({ pit, count, size }: { pit: number; count: number; size?: "pit" | "coop" }) {
@@ -117,16 +111,18 @@ function PitYard({
           data-pit={pit}
           disabled={disabled || !legal}
           onClick={() => onPick(pit)}
+          onMouseDown={(e) => e.preventDefault()}
           aria-label={`${owner} yard ${slot}, ${count} chickens${legal && !disabled ? ", ready to sow" : ""}`}
           className={cn(
             "yard relative min-h-11",
-            "transition-transform duration-[var(--motion-quick)] ease-[var(--ease-smooth-out)]",
-            legal && !disabled && "hover:-translate-y-0.5 hover:brightness-110",
+            "transition-[filter,outline-color] duration-[var(--motion-quick)] ease-[var(--ease-smooth-out)]",
+            legal && !disabled && "hover:brightness-110",
             legal && !disabled && "yard-legal",
             forage && "yard-forage",
             highlighted && "yard-hot",
             dropping && "yard-drop",
             landing && "yard-land",
+            count === 0 && "yard-bare",
             onTrail && !highlighted && !landing && "yard-trail",
             (!legal || disabled) && "cursor-default",
           )}
@@ -174,7 +170,18 @@ function CoopStore({
       role="img"
       aria-label={`${label} coop, ${count} in coop, ${out} in yards${extra ? ", extra turn" : active ? ", current turn" : ""}`}
     >
-      {capturePop ? <span className="coop-pop">+{capturePop}</span> : null}
+      {capturePop ? (
+        <>
+          <span className="coop-pop">+{capturePop}</span>
+          <span className="coop-chaff" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <i />
+            <i />
+          </span>
+        </>
+      ) : null}
       <img src={COOP_SRC} alt="" className="coop-mark" decoding="async" crossOrigin="anonymous" />
       <div className="coop-copy">
         <p className="coop-name">{label}</p>

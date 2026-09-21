@@ -1,6 +1,6 @@
 import { settleState, sideSum } from "../game/engine.ts";
-import type { BestOf, Difficulty, GameState, MatchSettings, PlayMode, Player, RuleSet, Winner } from "../game/types.ts";
-import { PIT_COUNT } from "../game/types.ts";
+import type { BestOf, GameState, MatchSettings, PlayMode, Player, RuleSet, Winner } from "../game/types.ts";
+import { clampDifficulty, PIT_COUNT } from "../game/types.ts";
 
 const SETTINGS_KEY = "manclucka:settings";
 const MUTE_KEY = "manclucka:muted";
@@ -147,13 +147,8 @@ export function loadSettingsPatch(): Partial<MatchSettings> {
     if (parsed.bestOf === 1 || parsed.bestOf === 3 || parsed.bestOf === 5 || parsed.bestOf === 7) {
       patch.bestOf = parsed.bestOf as BestOf;
     }
-    if (
-      typeof parsed.difficulty === "number" &&
-      Number.isInteger(parsed.difficulty) &&
-      parsed.difficulty >= 1 &&
-      parsed.difficulty <= 5
-    ) {
-      patch.difficulty = parsed.difficulty as Difficulty;
+    if (typeof parsed.difficulty === "number") {
+      patch.difficulty = clampDifficulty(parsed.difficulty);
     }
     if (typeof parsed.friendName === "string") {
       const friend = parsed.friendName.replace(/[\u0000-\u001F\u007F\u200B-\u200F\u202A-\u202E]/g, "").replace(/\s+/g, " ").trim().slice(0, 24);
@@ -300,10 +295,7 @@ export function parseMatchSnapshot(raw: unknown): MatchSnapshot | null {
       mode: settings.mode,
       rules: settings.rules,
       bestOf: settings.bestOf,
-      difficulty:
-        Number.isInteger(settings.difficulty) && settings.difficulty >= 1 && settings.difficulty <= 5
-          ? settings.difficulty
-          : 3,
+      difficulty: clampDifficulty(settings.difficulty),
       playerName: stripKeeper(String(settings.playerName || "You"), "You"),
       friendName: stripKeeper(String(settings.friendName || "Friend"), "Friend"),
     },

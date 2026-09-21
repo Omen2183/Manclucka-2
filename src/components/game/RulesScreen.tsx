@@ -1,6 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FarmScene } from "@/components/game/FarmScene";
+import { MixerButton } from "@/components/game/MixerButton";
 import { HOW_TO_STEPS, RULE_BLURBS, RULE_LABELS } from "@/game/names";
 import type { RuleSet } from "@/game/types";
 
@@ -8,10 +9,13 @@ export function RulesScreen({ onBack }: { onBack: () => void }) {
   return (
     <FarmScene>
       <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">
-        <Button variant="secondary" className="mb-4 w-fit" onClick={onBack}>
-          <ArrowLeft />
-          Back
-        </Button>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <Button variant="secondary" className="w-fit" onClick={onBack}>
+            <ArrowLeft />
+            Back
+          </Button>
+          <MixerButton className="farm-panel rounded-md" />
+        </div>
         <div className="farm-card rounded-2xl px-4 py-5 sm:px-5">
           <h1 className="font-display text-3xl">How to play</h1>
           <ol className="mt-4 space-y-3">

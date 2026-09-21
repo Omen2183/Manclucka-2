@@ -5,8 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { FarmScene } from "@/components/game/FarmScene";
 import { MixerButton } from "@/components/game/MixerButton";
-import { DIFFICULTY_BLURBS, DIFFICULTY_LABELS, pickOpponentName, RULE_BLURBS, RULE_LABELS } from "@/game/names";
-import type { BestOf, MatchSettings, PlayMode, RuleSet } from "@/game/types";
+import { difficultyBlurb, difficultyLabel, pickOpponentName, RULE_LABELS, RULE_TEASERS } from "@/game/names";
+import { clampDifficulty, type BestOf, type MatchSettings, type PlayMode, type RuleSet } from "@/game/types";
 import { cn, NAME_MAX } from "@/lib/utils";
 
 const MODES: { id: PlayMode; label: string; blurb: string; icon: typeof User }[] = [
@@ -41,18 +41,18 @@ export function SetupScreen({
 }) {
   return (
     <FarmScene>
-      <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col px-4 pb-12 pt-[max(1rem,env(safe-area-inset-top))]">
-        <div className="mb-4 flex items-center justify-between gap-2">
+      <div className="mx-auto flex h-dvh w-full max-w-lg flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+        <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
           <Button variant="secondary" className="w-fit" onClick={onBack}>
             <ArrowLeft />
             Back
           </Button>
           <MixerButton className="farm-panel rounded-md" />
         </div>
-        <div className="farm-card rounded-2xl px-4 py-5 sm:px-5">
+        <div className="farm-card min-h-0 flex-1 overflow-y-auto rounded-2xl px-4 py-5 sm:px-5">
           <h1 className="font-display text-3xl">Set the yard</h1>
 
-          <div className="mt-5 space-y-6 pb-32">
+          <div className="mt-5 space-y-6">
             <div>
               <Label htmlFor="player-name">Coop name</Label>
               <Input
@@ -110,7 +110,28 @@ export function SetupScreen({
                   value={settings.friendName}
                   onChange={(e) => onChange({ friendName: e.target.value.slice(0, NAME_MAX) })}
                 />
-                <p className="mt-1 text-xs text-muted">This name sits on the far coop.</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() =>
+                      onChange({
+                        friendName: pickOpponentName(settings.friendName, settings.playerName),
+                      })
+                    }
+                  >
+                    <Shuffle />
+                    Shuffle
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => onChange({ friendName: "" })}
+                  >
+                    Clear
+                  </Button>
+                </div>
+                <p className="mt-1 text-xs text-muted">This name sits on the far coop. Blank reads Friend.</p>
               </div>
             )}
 
@@ -158,22 +179,26 @@ export function SetupScreen({
               <div>
                 <div className="flex items-baseline justify-between">
                   <Label htmlFor="difficulty">Difficulty</Label>
-                  <span className="text-sm text-muted">{DIFFICULTY_LABELS[settings.difficulty]}</span>
+                  <span className="text-sm text-muted">{difficultyLabel(settings.difficulty)}</span>
                 </div>
                 <Slider
                   id="difficulty"
                   className="mt-3"
                   min={1}
                   max={5}
-                  step={1}
+                  step={0.5}
                   value={[settings.difficulty]}
-                  onValueChange={([v]) => onChange({ difficulty: (v ?? 3) as MatchSettings["difficulty"] })}
+                  aria-valuetext={difficultyLabel(settings.difficulty)}
+                  onValueChange={([v]) => onChange({ difficulty: clampDifficulty(v ?? 3) })}
                 />
-                <div className="mt-1 flex justify-between text-xs text-subtle">
-                  <span>Hatchling</span>
-                  <span>Flock Boss</span>
+                <div className="mt-1 grid grid-cols-5 text-[0.62rem] leading-tight text-subtle">
+                  <span className="text-left">Hatchling</span>
+                  <span className="text-center">Pullet</span>
+                  <span className="text-center">Hen</span>
+                  <span className="text-center">Rooster</span>
+                  <span className="text-right">Boss</span>
                 </div>
-                <p className="mt-2 text-sm text-muted">{DIFFICULTY_BLURBS[settings.difficulty]}</p>
+                <p className="mt-2 text-sm text-muted">{difficultyBlurb(settings.difficulty)}</p>
               </div>
             )}
 
@@ -193,7 +218,7 @@ export function SetupScreen({
                       )}
                     >
                       <span className="block font-medium">{RULE_LABELS[rule]}</span>
-                      <span className="mt-0.5 block text-sm text-muted">{RULE_BLURBS[rule]}</span>
+                      <span className="mt-0.5 block text-sm text-muted">{RULE_TEASERS[rule]}</span>
                     </button>
                   );
                 })}
@@ -252,25 +277,24 @@ export function SetupScreen({
                 ) : null}
               </div>
             )}
-
-            <div className="farm-dock sticky bottom-0 -mx-4 border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-              <Button
-                size="lg"
-                className="w-full"
-                onClick={settings.mode === "online" && joinCode.length === 6 ? onJoin : onStart}
-                disabled={joining}
-              >
-                {joining ? <Loader2 className="animate-spin" /> : <Swords />}
-                {joining
-                  ? "Checking"
-                  : settings.mode === "online" && joinCode.length === 6
-                    ? "Join flock"
-                    : settings.mode === "online"
-                      ? "Host a flock"
-                      : "Start"}
-              </Button>
-            </div>
           </div>
+        </div>
+        <div className="farm-dock -mx-4 shrink-0 border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <Button
+            size="lg"
+            className="w-full"
+            onClick={settings.mode === "online" && joinCode.length === 6 ? onJoin : onStart}
+            disabled={joining}
+          >
+            {joining ? <Loader2 className="animate-spin" /> : <Swords />}
+            {joining
+              ? "Checking"
+              : settings.mode === "online" && joinCode.length === 6
+                ? "Join flock"
+                : settings.mode === "online"
+                  ? "Host a flock"
+                  : "Start"}
+          </Button>
         </div>
       </div>
     </FarmScene>

@@ -47,11 +47,30 @@ export const DIFFICULTY_LABELS: Record<1 | 2 | 3 | 4 | 5, string> = {
 
 export const DIFFICULTY_BLURBS: Record<1 | 2 | 3 | 4 | 5, string> = {
   1: "Pecks at random.",
-  2: "Looks one yard ahead.",
-  3: "Plans a little — still leaves openings.",
+  2: "Mostly wandering — notices a treat now and then.",
+  3: "Goes for extra turns and captures, still leaves the gate open.",
   4: "Thinks a couple of turns out.",
   5: "The sharpest hen. Still beatable.",
 };
+
+export function difficultyLabel(level: number): string {
+  if (level === 1 || level === 2 || level === 3 || level === 4 || level === 5) {
+    return DIFFICULTY_LABELS[level];
+  }
+  const lo = Math.floor(level) as 1 | 2 | 3 | 4;
+  const hi = Math.ceil(level) as 2 | 3 | 4 | 5;
+  if (DIFFICULTY_LABELS[lo] && DIFFICULTY_LABELS[hi]) {
+    return `${DIFFICULTY_LABELS[lo]}–${DIFFICULTY_LABELS[hi]}`;
+  }
+  return DIFFICULTY_LABELS[3];
+}
+
+export function difficultyBlurb(level: number): string {
+  if (level === 1 || level === 2 || level === 3 || level === 4 || level === 5) {
+    return DIFFICULTY_BLURBS[level];
+  }
+  return "A step between the named hens.";
+}
 
 export const RULE_LABELS: Record<"classic" | "first-empty" | "until-empty", string> = {
   classic: "Classic Kalah",
@@ -59,11 +78,17 @@ export const RULE_LABELS: Record<"classic" | "first-empty" | "until-empty", stri
   "until-empty": "Until empty",
 };
 
+export const RULE_TEASERS: Record<"classic" | "first-empty" | "until-empty", string> = {
+  classic: "Extra turns, captures, leftovers to whoever still has hens.",
+  "first-empty": "First to clear their yards claims the leftover flock.",
+  "until-empty": "Keep sowing until every yard is bare.",
+};
+
 export const RULE_BLURBS: Record<"classic" | "first-empty" | "until-empty", string> = {
   classic:
     "Standard Kalah. Extra turn if you land in your coop. Capture by landing in an empty yard on your side when the opposite yard has hens — both flocks go to your coop. When a side is empty, leftover chickens go to the player who still has them.",
   "first-empty":
-    "Same sowing and captures, but the first player to clear their yards claims every remaining chicken on the board.",
+    "Same sowing and captures, but the first player to clear their yards claims every leftover chicken on the board.",
   "until-empty":
     "Keep taking turns until every yard is empty. Captures and extra turns still count. If your yards are bare, pick one yard from across the fence — both keepers share whatever flock is left.",
 };

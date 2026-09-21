@@ -31,7 +31,7 @@ import {
   winsNeeded,
 } from "@/game/engine";
 import { keyRow } from "@/game/board-view";
-import { displayTakes, displayTurn, HOW_TO_STEPS, RULE_BLURBS, RULE_LABELS } from "@/game/names";
+import { difficultyLabel, displayTakes, displayTurn, HOW_TO_STEPS, RULE_BLURBS, RULE_LABELS } from "@/game/names";
 import { usePlayOrientation } from "@/game/use-orientation";
 import type { Difficulty, GameState, MatchSettings, Player } from "@/game/types";
 import { loadTipped, saveTipped } from "@/lib/persist";
@@ -39,6 +39,12 @@ import { cn } from "@/lib/utils";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function nextPaint(): Promise<void> {
+  return new Promise((r) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => r()));
+  });
 }
 
 function prefersReduced(): boolean {
@@ -343,7 +349,7 @@ export function PlayScreen({
       setDropping(dest);
       if (!skipAnim && from && destPt) {
         setFly({ src: hen.src, x: from.x, y: from.y });
-        await sleep(16);
+        await nextPaint();
         if (commitIfGone()) return;
         setFly({ src: hen.src, x: destPt.x, y: destPt.y });
         playSow();
@@ -371,7 +377,7 @@ export function PlayScreen({
       const stolenHen = breedFor(planned.capture.opposite, 0);
       if (!skipAnim && oppPt && coopPt) {
         setFly({ src: stolenHen.src, x: oppPt.x, y: oppPt.y });
-        await sleep(20);
+        await nextPaint();
         if (commitIfGone()) return;
         setFly({ src: stolenHen.src, x: coopPt.x, y: coopPt.y });
         await sleep(220);
@@ -423,7 +429,7 @@ export function PlayScreen({
           const leftoverHen = breedFor(yard, 0);
           if (!skipAnim && srcPt && destPt) {
             setFly({ src: leftoverHen.src, x: srcPt.x, y: srcPt.y });
-            await sleep(16);
+            await nextPaint();
             if (commitIfGone()) return;
             setFly({ src: leftoverHen.src, x: destPt.x, y: destPt.y });
             playSow();
@@ -524,7 +530,7 @@ export function PlayScreen({
     if (!legalPits(state).includes(pit)) {
       playIllegal();
       rumble(8);
-      setBanner("That yard isn't ready");
+      setBanner(state.pits[pit] === 0 ? "That yard is bare" : "That yard isn't ready");
       return;
     }
     const now = performance.now();
@@ -548,9 +554,13 @@ export function PlayScreen({
       : gathering
         ? `${names[state.turn]} — yards empty, peck across the fence`
         : tip && yourTurn
-          ? typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches
-            ? "Tap a numbered yard to sow, or press 1–6"
-            : "Tap a numbered yard to sow"
+          ? hintPit != null
+            ? typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches
+              ? "Yard 3 often extra-turns — or pick 1–6"
+              : "Yard 3 often extra-turns — or tap any glowing yard"
+            : typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches
+              ? "Tap a numbered yard to sow, or press 1–6"
+              : "Tap a numbered yard to sow"
           : busy && !state.ended
             ? hurrying
               ? "Hurrying the flock"
@@ -582,7 +592,7 @@ export function PlayScreen({
             src={fly.src}
             alt=""
             className="fly-hen"
-            style={{ left: fly.x - 19, top: fly.y - 19 }}
+            style={{ transform: `translate3d(${fly.x - 19}px, ${fly.y - 19}px, 0)` }}
             crossOrigin="anonymous"
           />,
           document.body,
@@ -601,8 +611,9 @@ export function PlayScreen({
             >
               {RULE_LABELS[settings.rules]}
             </button>
-            <p className="hidden truncate text-xs text-muted sm:block">
-              {settings.bestOf === 1 ? "Single game" : `Best of ${settings.bestOf} · first to ${need} · game ${gameIndex + 1}`}
+            <p className="truncate text-xs text-muted">
+              {settings.bestOf === 1 ? "Single game" : `Game ${gameIndex + 1} of ${settings.bestOf}`}
+              {aiPlayer != null ? ` · ${difficultyLabel(settings.difficulty)}` : ""}
             </p>
           </div>
           <div className="flex items-center gap-1.5">
@@ -646,11 +657,20 @@ export function PlayScreen({
 
         <p className="play-status farm-panel rounded-md" role="status" aria-live="polite" aria-atomic="true">
           <span>{status}</span>
-          {busy && !state.ended && !blocked ? (
-            <Button type="button" size="sm" variant="secondary" onClick={requestHurry}>
-              Skip
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className={cn(
+              "play-skip",
+              !(busy && !state.ended && !blocked) && "invisible pointer-events-none",
+            )}
+            tabIndex={busy && !state.ended && !blocked ? 0 : -1}
+            aria-hidden={!(busy && !state.ended && !blocked)}
+            onClick={requestHurry}
+          >
+            Skip
+          </Button>
         </p>
 
         <div className={cn("board-stage", shake && "shake")}>
