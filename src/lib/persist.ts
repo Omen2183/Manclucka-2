@@ -6,6 +6,7 @@ const SETTINGS_KEY = "manclucka:settings";
 const MUTE_KEY = "manclucka:muted";
 const STATS_KEY = "manclucka:stats";
 const TIP_KEY = "manclucka:tipped";
+const CAPTURE_TIP_KEY = "manclucka:capture-tipped";
 const MIXER_KEY = "manclucka:mixer";
 const MATCH_KEY = "manclucka:match";
 
@@ -206,6 +207,14 @@ export function loadTipped(): boolean {
 
 export function saveTipped(): void {
   writeStore(TIP_KEY, "1");
+}
+
+export function loadCaptureTipped(): boolean {
+  return readStore(CAPTURE_TIP_KEY) === "1";
+}
+
+export function saveCaptureTipped(): void {
+  writeStore(CAPTURE_TIP_KEY, "1");
 }
 
 function isPlayer(value: unknown): value is Player {

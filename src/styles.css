@@ -756,8 +756,11 @@ html.play-flipped .series-overlay {
 }
 
 .hen-pop {
-  animation: hen-pop var(--motion-fast) var(--ease-smooth-out);
+  animation:
+    hen-pop var(--motion-fast) var(--ease-smooth-out),
+    hen-idle 3.6s ease-in-out 0.45s infinite;
   transform: scale(var(--hen-scale, 1));
+  transform-origin: 50% 80%;
 }
 
 @keyframes hen-pop {
@@ -768,6 +771,16 @@ html.play-flipped .series-overlay {
   to {
     transform: scale(var(--hen-scale, 1));
     opacity: 1;
+  }
+}
+
+@keyframes hen-idle {
+  0%,
+  100% {
+    transform: scale(var(--hen-scale, 1)) translateY(0);
+  }
+  50% {
+    transform: scale(var(--hen-scale, 1)) translateY(-2px);
   }
 }
 
@@ -834,7 +847,9 @@ html.play-flipped .series-overlay {
   .yard-forage,
   .coop-pop,
   .coop-chaff,
-  .coop-chaff i {
+  .coop-chaff i,
+  .series-chaff,
+  .series-chaff i {
     animation: none;
     transition: none;
   }
@@ -990,6 +1005,46 @@ html.play-flipped .series-overlay {
     url("/art/wood.jpg");
   background-size: auto, 640px;
   background-blend-mode: soft-light;
+}
+
+.series-chaff {
+  pointer-events: none;
+  position: absolute;
+  inset: 0 0 55%;
+  overflow: hidden;
+}
+
+.series-chaff i {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  width: 7px;
+  height: 3px;
+  border-radius: 1px;
+  background: color-mix(in oklab, var(--color-straw) 85%, white);
+  opacity: 0;
+  animation: series-chaff 1100ms var(--ease-smooth-out) both;
+}
+
+.series-chaff i:nth-child(1) { --dx: -42px; --dy: 18px; --rot: -24deg; }
+.series-chaff i:nth-child(2) { --dx: 38px; --dy: 8px; --rot: 18deg; animation-delay: 40ms; }
+.series-chaff i:nth-child(3) { --dx: -12px; --dy: 28px; --rot: 8deg; animation-delay: 80ms; }
+.series-chaff i:nth-child(4) { --dx: 52px; --dy: 22px; --rot: 32deg; animation-delay: 30ms; }
+.series-chaff i:nth-child(5) { --dx: -56px; --dy: 6px; --rot: -36deg; animation-delay: 70ms; }
+.series-chaff i:nth-child(6) { --dx: 8px; --dy: 14px; --rot: -8deg; animation-delay: 110ms; }
+
+@keyframes series-chaff {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--rot));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

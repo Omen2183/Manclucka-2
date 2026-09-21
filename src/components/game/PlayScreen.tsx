@@ -31,10 +31,10 @@ import {
   winsNeeded,
 } from "@/game/engine";
 import { keyRow } from "@/game/board-view";
-import { difficultyLabel, displayTakes, displayTurn, HOW_TO_STEPS, RULE_BLURBS, RULE_LABELS } from "@/game/names";
+import { difficultyLabel, displayCallsHome, displayLeftovers, displaySteals, displayTakes, displayTurn, HOW_TO_STEPS, RULE_BLURBS, RULE_LABELS } from "@/game/names";
 import { usePlayOrientation } from "@/game/use-orientation";
 import type { Difficulty, GameState, MatchSettings, Player } from "@/game/types";
-import { loadTipped, saveTipped } from "@/lib/persist";
+import { loadCaptureTipped, loadTipped, saveCaptureTipped, saveTipped } from "@/lib/persist";
 import { cn } from "@/lib/utils";
 
 function sleep(ms: number) {
@@ -402,10 +402,15 @@ export function PlayScreen({
         }
       }, 720);
       setBanner(
-        current.turn === south
-          ? `${names[current.turn]} calls ${planned.capture.amount} home`
-          : `${names[current.turn]} steals ${planned.capture.amount}`,
+        !loadCaptureTipped()
+          ? current.turn === south
+            ? `Capture — both flocks go to your coop (+${planned.capture.amount})`
+            : `${names[current.turn]} captures — both flocks go to the coop`
+          : current.turn === south
+            ? displayCallsHome(names[current.turn], planned.capture.amount)
+            : displaySteals(names[current.turn], planned.capture.amount),
       );
+      saveCaptureTipped();
       if (!skipAnim) await sleep(220);
     }
 
@@ -416,11 +421,7 @@ export function PlayScreen({
         if (isYard(i) && visual.pits[i]! > 0 && planned.state.pits[i] === 0) leftovers.push(i);
       }
       if (leftovers.length) {
-        setBanner(
-          settings.rules === "first-empty"
-            ? `${names[holder]} claims the leftover flock`
-            : `${names[holder]} takes the leftover flock`,
-        );
+        setBanner(displayLeftovers(names[holder], settings.rules === "first-empty"));
         const destPt = pitPoint(storeOf(holder));
         const skipAnim = prefersReduced() || hurryRef.current;
         for (const yard of leftovers) {
@@ -495,7 +496,7 @@ export function PlayScreen({
     if (playing.current || !alive.current) return;
     setBusy(true);
     setBanner(`${names[current.turn]} is thinking`);
-    playExtraTurn();
+    playSow();
     const started = performance.now();
     const pit = chooseAiMove(current, difficulty);
     const wait = Math.max(0, thinkMs(difficulty) - (performance.now() - started));

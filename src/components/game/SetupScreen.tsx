@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { FarmScene } from "@/components/game/FarmScene";
 import { MixerButton } from "@/components/game/MixerButton";
-import { difficultyBlurb, difficultyLabel, pickOpponentName, RULE_LABELS, RULE_TEASERS } from "@/game/names";
+import { difficultyBlurb, difficultyLabel, pickOpponentName, RULE_LABELS, RULE_TEASERS, yardBrief } from "@/game/names";
 import { clampDifficulty, type BestOf, type MatchSettings, type PlayMode, type RuleSet } from "@/game/types";
 import { cn, NAME_MAX } from "@/lib/utils";
 
@@ -280,6 +280,16 @@ export function SetupScreen({
           </div>
         </div>
         <div className="farm-dock -mx-4 shrink-0 border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <p className="mb-2 truncate text-center text-xs text-muted">
+            {yardBrief({
+              you: settings.playerName,
+              rival: settings.friendName,
+              mode: settings.mode,
+              difficulty: settings.difficulty,
+              rules: settings.rules,
+              bestOf: settings.bestOf,
+            })}
+          </p>
           <Button
             size="lg"
             className="w-full"

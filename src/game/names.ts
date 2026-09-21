@@ -110,3 +110,36 @@ export function displayTurn(name: string, yours: boolean): string {
 export function displayTakes(name: string, what: string): string {
   return name === "You" ? `You take ${what}` : `${name} takes ${what}`;
 }
+
+export function displayCallsHome(name: string, amount: number): string {
+  return name === "You" ? `You call ${amount} home` : `${name} calls ${amount} home`;
+}
+
+export function displaySteals(name: string, amount: number): string {
+  return name === "You" ? `You steal ${amount}` : `${name} steals ${amount}`;
+}
+
+export function displayLeftovers(name: string, claim: boolean): string {
+  if (name === "You") return claim ? "You claim the leftover flock" : "You take the leftover flock";
+  return claim ? `${name} claims the leftover flock` : `${name} takes the leftover flock`;
+}
+
+export function yardBrief(args: {
+  you: string;
+  rival: string;
+  mode: "solo" | "hotseat" | "online";
+  difficulty: number;
+  rules: "classic" | "first-empty" | "until-empty";
+  bestOf: number;
+}): string {
+  const you = args.you.trim() || "You";
+  const rival =
+    args.mode === "online"
+      ? "another keeper"
+      : args.rival.trim() || (args.mode === "solo" ? "a surprise hen" : "Friend");
+  const bits = [`${you} vs ${rival}`];
+  if (args.mode === "solo") bits.push(difficultyLabel(args.difficulty));
+  bits.push(RULE_LABELS[args.rules]);
+  bits.push(args.bestOf === 1 ? "one game" : `best of ${args.bestOf}`);
+  return bits.join(" · ");
+}

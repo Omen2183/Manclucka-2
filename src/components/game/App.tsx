@@ -609,12 +609,22 @@ function SeriesMatch({
       {gate !== "play" && lastWinner != null && (
         <div className="fixed inset-0 z-30 flex items-end justify-center overflow-y-auto bg-wood-dark/55 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center series-overlay">
           <div
-            className="series-card farm-card w-full max-w-md rounded-xl p-5 shadow-lg"
+            className="series-card farm-card relative w-full max-w-md overflow-hidden rounded-xl p-5 shadow-lg"
             role="dialog"
             aria-modal="true"
             aria-labelledby="series-title"
             tabIndex={-1}
           >
+            {gate === "over" ? (
+              <span className="series-chaff" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+              </span>
+            ) : null}
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">
               {gate === "over" ? (settings.bestOf === 1 ? "game" : "series") : `game ${gameIndex + 1}`}
             </p>
