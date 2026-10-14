@@ -322,10 +322,14 @@ html.play-flipped .series-overlay {
 .play-status > span {
   min-width: 0;
   max-width: 100%;
-  padding-inline: 3.6rem;
+  padding-inline: 0.35rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.play-status-skip > span {
+  padding-right: 4.2rem;
 }
 
 .play-skip {

@@ -92,4 +92,18 @@ test("parses series-over sync and rejects fractional scores", () => {
     }),
     null,
   );
+  assert.equal(
+    parseNetMessage({
+      type: "sync",
+      seq: 0,
+      gameIndex: 0,
+      scores: [0, 0],
+      gate: "play",
+      pits: Array.from({ length: 14 }, () => 0),
+      turn: 0,
+      ended: false,
+      winner: null,
+    }),
+    null,
+  );
 });

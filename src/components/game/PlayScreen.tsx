@@ -402,15 +402,13 @@ export function PlayScreen({
         }
       }, 720);
       setBanner(
-        !loadCaptureTipped()
-          ? current.turn === south
-            ? `Capture — both flocks go to your coop (+${planned.capture.amount})`
-            : `${names[current.turn]} captures — both flocks go to the coop`
+        !loadCaptureTipped() && current.turn === south
+          ? `Capture — both flocks go to your coop (+${planned.capture.amount})`
           : current.turn === south
             ? displayCallsHome(names[current.turn], planned.capture.amount)
             : displaySteals(names[current.turn], planned.capture.amount),
       );
-      saveCaptureTipped();
+      if (current.turn === south) saveCaptureTipped();
       if (!skipAnim) await sleep(220);
     }
 
@@ -557,8 +555,8 @@ export function PlayScreen({
         : tip && yourTurn
           ? hintPit != null
             ? typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches
-              ? "Yard 3 often extra-turns — or pick 1–6"
-              : "Yard 3 often extra-turns — or tap any glowing yard"
+              ? "Yard 3 extra-turns — or press 1–6"
+              : "Yard 3 extra-turns — or tap a glowing yard"
             : typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches
               ? "Tap a numbered yard to sow, or press 1–6"
               : "Tap a numbered yard to sow"
@@ -656,7 +654,15 @@ export function PlayScreen({
           <MixerButton />
         </header>
 
-        <p className="play-status farm-panel rounded-md" role="status" aria-live="polite" aria-atomic="true">
+        <p
+          className={cn(
+            "play-status farm-panel rounded-md",
+            busy && !state.ended && !blocked && "play-status-skip",
+          )}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           <span>{status}</span>
           <Button
             type="button"

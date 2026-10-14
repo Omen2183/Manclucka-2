@@ -71,7 +71,7 @@ function parsePits(value: unknown): number[] | null {
   if (!value.every((n) => typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 48)) return null;
   const pits = value.map((n) => Number(n));
   const total = pits.reduce((a, b) => a + b, 0);
-  if (total > 48) return null;
+  if (total !== 48) return null;
   return pits;
 }
 

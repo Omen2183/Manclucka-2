@@ -369,6 +369,8 @@ function SeriesMatch({
   onRequestNext,
   remoteNext,
   onRemoteNextConsumed,
+  onRemoteClockReset,
+  onTurn,
   remoteForfeit,
   remoteSync,
   onRemoteSyncConsumed,
@@ -389,6 +391,8 @@ function SeriesMatch({
   onRequestNext?: (gameIndex: number) => void;
   remoteNext?: number;
   onRemoteNextConsumed?: () => void;
+  onRemoteClockReset?: () => void;
+  onTurn?: (turn: Player) => void;
   remoteForfeit?: Player | null;
   remoteSync?: SyncMsg | null;
   onRemoteSyncConsumed?: () => void;
@@ -411,6 +415,12 @@ function SeriesMatch({
   const appliedForfeit = useRef(false);
   const gateRef = useRef(gate);
   gateRef.current = gate;
+  const onTurnRef = useRef(onTurn);
+  onTurnRef.current = onTurn;
+
+  useEffect(() => {
+    onTurnRef.current?.(board.turn);
+  }, [board.turn]);
 
   function persist(nextBoard: GameState, nextScores: [number, number], nextGate: SeriesGate, nextIndex: number) {
     const snap: MatchSnapshot = {
@@ -484,6 +494,7 @@ function SeriesMatch({
       setLastCoops([0, 0]);
       setBoard(initialState(settings.rules, openerOf(0)));
       setMatchKey((k) => k + 1);
+      onRemoteClockReset?.();
       onRemoteNextConsumed?.();
       return;
     }
@@ -492,11 +503,12 @@ function SeriesMatch({
       setGate("play");
       setLastWinner(null);
       setBoard(initialState(settings.rules, openerOf(remoteNext)));
+      onRemoteClockReset?.();
       onRemoteNextConsumed?.();
       return;
     }
     onRemoteNextConsumed?.();
-  }, [remoteNext, gameIndex, settings.rules, gate, onRemoteNextConsumed]);
+  }, [remoteNext, gameIndex, settings.rules, gate, onRemoteNextConsumed, onRemoteClockReset]);
 
   useEffect(() => {
     if (remoteForfeit == null || appliedForfeit.current) return;
@@ -730,6 +742,7 @@ function OnlineShell({
   const [claim, setClaim] = useState(false);
   const seqRef = useRef(resume?.seq ?? 0);
   seqRef.current = seq;
+  const turnRef = useRef<Player>(resume?.board.turn ?? 0);
   const connectedRef = useRef(false);
   const playingRef = useRef(playing);
   playingRef.current = playing;
@@ -847,6 +860,8 @@ function OnlineShell({
         setPlaying(true);
       }
       if (msg.type === "sync") {
+        if (host) return;
+        turnRef.current = msg.turn;
         if (msg.names) setNames(msg.names);
         seqRef.current = 0;
         setSeq(0);
@@ -856,10 +871,10 @@ function OnlineShell({
         setPlaying(true);
       }
       if (msg.type === "move") {
-        if (msg.seq > seqRef.current) {
-          seqRef.current = msg.seq;
-          setSeq(msg.seq);
-        }
+        if (!playingRef.current || turnRef.current === south) return;
+        if (msg.seq !== seqRef.current + 1) return;
+        seqRef.current = msg.seq;
+        setSeq(msg.seq);
         setIncoming((q) => {
           if (q.some((m) => m.seq === msg.seq)) return q;
           const next = [...q, { pit: msg.pit, seq: msg.seq }];
@@ -867,13 +882,10 @@ function OnlineShell({
         });
       }
       if (msg.type === "next") {
-        seqRef.current = 0;
-        setSeq(0);
         setRemoteNext(msg.gameIndex);
-        setIncoming([]);
-        setIncomingReset((n) => n + 1);
       }
       if (msg.type === "forfeit") {
+        if (msg.player === south) return;
         setRemoteForfeit(msg.player);
       }
     });
@@ -1018,6 +1030,15 @@ function OnlineShell({
         incomingMoves={incoming}
         remoteNext={remoteNext}
         onRemoteNextConsumed={() => setRemoteNext(undefined)}
+        onRemoteClockReset={() => {
+          seqRef.current = 0;
+          setSeq(0);
+          setIncoming([]);
+          setIncomingReset((n) => n + 1);
+        }}
+        onTurn={(turn) => {
+          turnRef.current = turn;
+        }}
         remoteForfeit={remoteForfeit}
         remoteSync={remoteSync}
         onRemoteSyncConsumed={() => setRemoteSync(null)}
